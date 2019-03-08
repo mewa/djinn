@@ -69,7 +69,6 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 func (d *Djinn) Start() {
 	select {
 	case <-d.etcd.Server.ReadyNotify():
-		d.Serve()
 
 		d.log.Info("djinn ready")
 
