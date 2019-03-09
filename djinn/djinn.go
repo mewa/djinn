@@ -4,7 +4,7 @@ import (
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/etcd/mvcc"
 	"github.com/coreos/etcd/mvcc/mvccpb"
-	"github.com/mewa/cron"
+	"github.com/mewa/djinn/cron"
 	"go.uber.org/zap"
 	"net/http"
 )
@@ -12,7 +12,7 @@ import (
 type Djinn struct {
 	etcd *embed.Etcd
 
-	cronParser cron.Parser
+	cron cron.Cron
 
 	server    *http.Server
 	schedules map[string]cron.EntryID
@@ -42,20 +42,10 @@ func New() *Djinn {
 		return nil
 	}
 
-	cronParser := cron.NewParser(
-		cron.SecondOptional |
-			cron.Minute |
-			cron.Hour |
-			cron.Dom |
-			cron.Month |
-			cron.Dow |
-			cron.Descriptor,
-	)
-
 	return &Djinn{
 		etcd: e,
 
-		cronParser: cronParser,
+		cron: cron.New(),
 
 		log:  log,
 		Done: make(chan struct{}),
@@ -69,6 +59,7 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 func (d *Djinn) Start() {
 	select {
 	case <-d.etcd.Server.ReadyNotify():
+		d.cron.Start()
 
 		d.log.Info("djinn ready")
 
