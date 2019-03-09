@@ -1,6 +1,7 @@
 package djinn
 
 import (
+	"github.com/mewa/djinn/djinn/job"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/etcd/mvcc"
 	"github.com/coreos/etcd/mvcc/mvccpb"
@@ -52,10 +53,6 @@ func New() *Djinn {
 	}
 }
 
-// TODO: add implementation
-func (d *Djinn) applyEvent(event mvccpb.Event) {
-}
-
 func (d *Djinn) Start() {
 	select {
 	case <-d.etcd.Server.ReadyNotify():
@@ -86,4 +83,32 @@ func (d *Djinn) Start() {
 	d.log.Info("djinn shutting down")
 
 	d.etcd.Close()
+}
+
+func (d *Djinn) applyEvent(event mvccpb.Event) {
+	var j job.Job
+	err := job.Unmarshal(event.Kv.Value, &j)
+
+	if err != nil {
+		d.log.Error("could not unmarshal event", zap.Error(err))
+		return
+	}
+
+	j.RemoveHandler = d.removeJob
+
+	d.upsertJob(&j)
+}
+
+func (d *Djinn) upsertJob(j *job.Job) error {
+	d.cron.UpsertEntry(cron.Entry{
+		ID: cron.EntryID(j.ID),
+		Schedule: j,
+		Next: j.NextTime,
+		Prev: j.PrevTime,
+	})
+	return nil
+}
+
+func (d *Djinn) removeJob(j *job.Job) {
+	d.cron.RemoveEntry(cron.EntryID(j.ID))
 }
