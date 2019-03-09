@@ -3,6 +3,7 @@ package job
 import (
 	"time"
 	"encoding/json"
+	"github.com/mewa/djinn/cron"
 )
 
 type ID string
@@ -20,8 +21,21 @@ type Job struct {
 
 	State State `json:"state"`
 
-	Next time.Time `json:"next"`
-	Prev time.Time `json:"prev"`
+	Schedule cron.Schedule `json:"-"`
+	RemoveHandler func(job *Job) `json:"-"`
+
+	NextTime time.Time `json:"next"`
+	PrevTime time.Time `json:"prev"`
+}
+
+func (job *Job) Next(t time.Time) time.Time {
+	next := job.Schedule.Next(t)
+	if next.IsZero() && job.State == Done {
+		go job.RemoveHandler(job)
+	}
+	job.PrevTime = job.NextTime
+	job.NextTime = next
+	return next
 }
 
 func Marshal(job *Job) ([]byte, error) {
