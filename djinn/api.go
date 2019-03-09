@@ -1,24 +1,39 @@
 package djinn
 
 import (
-	"github.com/mewa/cron"
-	"github.com/mewa/djinn/schedule"
-	"go.uber.org/zap"
+	"context"
+	"github.com/coreos/etcd/etcdserver/etcdserverpb"
+	"github.com/mewa/djinn/djinn/job"
 )
 
-func (d *Djinn) Schedule(sched cron.Schedule) error {
-	var schedType string
+type JobAddRequest struct {
+	job.Job
+}
 
-	switch sched.(type) {
-	case *schedule.Once:
-		schedType = "once"
-	case *cron.SpecSchedule:
-		schedType = "cron"
-	default:
-		return ErrUnknownScheduleType
+type JobAddResponse struct {
+	job.Job
+}
+
+func (d *Djinn) Add(req *JobAddRequest) (*JobAddResponse, error) {
+	resp := &JobAddResponse{
+		req.Job,
 	}
 
-	d.log.Info("new schedule", zap.String("type", schedType))
+	val, err := job.Marshal(&req.Job)
 
-	return nil
+	if err != nil {
+		return nil, err
+	}
+
+	_, err := d.etcd.Server.Put(context.TODO(), &etcdserverpb.PutRequest{
+		Key: []byte(req.Job.ID),
+		Value: val,
+		PrevKv: true,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, err
 }
