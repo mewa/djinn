@@ -11,16 +11,21 @@ type Schedule interface {
 type EntryID string
 
 type Entry struct {
+	// has to be unique for cron instance
 	ID EntryID
 
 	Schedule Schedule
 
-	PrevTime time.Time
-	NextTime time.Time
+	Prev time.Time
+	Next time.Time
 }
 
 type Cron interface {
 	AddEntry(entry Entry)
+	UpsertEntry(entry Entry)
+
+	UpdateEntry(entry Entry)
+	Entry(id EntryID) Entry
 	RemoveEntry(id EntryID)
 
 	Start()
