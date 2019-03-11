@@ -21,12 +21,10 @@ type Entry struct {
 }
 
 type Cron interface {
-	AddEntry(entry Entry)
-	UpsertEntry(entry Entry)
+	PutEntry(entry Entry)
+	DeleteEntry(id EntryID)
 
-	UpdateEntry(entry Entry)
 	Entry(id EntryID) Entry
-	RemoveEntry(id EntryID)
 
 	Start()
 	Stop()

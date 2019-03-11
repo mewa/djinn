@@ -6,13 +6,9 @@ func New() *Dcron {
 	return &Dcron{}
 }
 
-func (c *Dcron) AddEntry(entry Entry) {}
+func (c *Dcron) PutEntry(entry Entry) {}
 
-func (c *Dcron) UpsertEntry(entry Entry) {}
-
-func (c *Dcron) RemoveEntry(id EntryID) {}
-
-func (c *Dcron) UpdateEntry(entry Entry) {}
+func (c *Dcron) DeleteEntry(id EntryID) {}
 
 func (c *Dcron) Entry(id EntryID) Entry {
 	return Entry{}
