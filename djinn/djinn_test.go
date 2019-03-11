@@ -76,22 +76,39 @@ func Test_Membership_WithJoin(t *testing.T) {
 		"membership_test02=http://localhost:4001",
 	})
 
-	go d1.Start()
+	err := d1.Start()
 	defer d1.Stop()
-	go d2.Start()
-	defer d2.Stop()
 
-	for i := 0; i < 2; {
-		select {
-		case <-d1.Started:
-			i++
-		case <-d2.Started:
-			i++
-		case <-time.After(5000 * time.Millisecond):
-			if i != 2 {
-				t.Fatalf("timed out creating cluster")
-			}
-			return
-		}
+	if err != nil {
+		t.Fatalf("error starting d1: %s", err)
 	}
+
+	select {
+	case <-d1.Started:
+		_, err := d1.AddMember(&AddMemberRequest{
+			name: d2.name,
+			host: d2.host,
+		})
+
+		if err != nil {
+			t.Fatalf("could not add member %s", err)
+		}
+
+		// d1 is already properly configured
+		err = d2.Start()
+		defer d2.Stop()
+
+		if err != nil {
+			t.Fatalf("error starting d2: %s", err)
+		}
+
+		select {
+		case <-d2.Started:
+			return
+		case <-time.After(2000 * time.Millisecond):
+		}
+	case <-time.After(2000 * time.Millisecond):
+	}
+
+	t.Fatal("timed out creating cluster")
 }
