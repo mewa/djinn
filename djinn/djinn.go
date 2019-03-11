@@ -1,11 +1,11 @@
 package djinn
 
 import (
-	"github.com/mewa/djinn/djinn/job"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/etcd/mvcc"
 	"github.com/coreos/etcd/mvcc/mvccpb"
 	"github.com/mewa/djinn/cron"
+	"github.com/mewa/djinn/djinn/job"
 	"go.uber.org/zap"
 	"net/http"
 	"net/url"
@@ -23,7 +23,11 @@ type Djinn struct {
 
 	log *zap.Logger
 
-	Done chan struct{}
+	running bool
+
+	Started chan struct{}
+	stop    chan struct{}
+	Done    chan struct{}
 }
 
 func New(name, host string, peers []string) *Djinn {
@@ -63,14 +67,18 @@ func New(name, host string, peers []string) *Djinn {
 
 		cron: cron.New(),
 
-		log:  log,
-		Done: make(chan struct{}),
+		log: log,
+
+		Started: make(chan struct{}, 1),
+		stop:    make(chan struct{}),
+		Done:    make(chan struct{}),
 	}
 }
 
 func (d *Djinn) Start() {
 	select {
 	case <-d.etcd.Server.ReadyNotify():
+		d.running = true
 		d.cron.Start()
 
 		d.log.Info("djinn ready")
@@ -85,8 +93,12 @@ func (d *Djinn) Start() {
 			panic("could not watch changes")
 		}
 
+		d.Started <- struct{}{}
+	Loop:
 		for {
 			select {
+			case <-d.stop:
+				break Loop
 			case r := <-ch:
 				for _, event := range r.Events {
 					d.applyEvent(event)
@@ -98,6 +110,15 @@ func (d *Djinn) Start() {
 	d.log.Info("djinn shutting down")
 
 	d.etcd.Close()
+	d.Done <- struct{}{}
+}
+
+func (d *Djinn) Stop() {
+	if d.running {
+		d.stop <- struct{}{}
+		<-d.Done
+	}
+	d.running = false
 }
 
 func (d *Djinn) applyEvent(event mvccpb.Event) {
