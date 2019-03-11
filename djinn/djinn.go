@@ -8,6 +8,9 @@ import (
 	"github.com/mewa/djinn/cron"
 	"go.uber.org/zap"
 	"net/http"
+	"net/url"
+	"strings"
+	"os"
 )
 
 type Djinn struct {
@@ -23,18 +26,30 @@ type Djinn struct {
 	Done chan struct{}
 }
 
-// TODO: add configuration
-// host string, peers []string
-func New() *Djinn {
+func New(name, host string, peers []string) *Djinn {
 	log, _ := zap.NewDevelopment()
 
-	// TODO: use tmpfs as storage
 	conf := embed.NewConfig()
-	conf.Dir = "/tmp/djinn/mewa.etcd"
+
+	conf.Name = name
+	conf.Dir = "/tmp/djinn/" + name
+
+	// we don't want to persist data on disk
+	os.RemoveAll(conf.Dir)
 
 	// disable client access
 	conf.LCUrls = nil
 	conf.ACUrls = nil
+
+	hostUrl, err := url.Parse(host)
+	conf.APUrls = []url.URL{*hostUrl}
+	conf.LPUrls = []url.URL{*hostUrl}
+
+	if peers != nil {
+		conf.InitialCluster = strings.Join(peers, ",")
+	} else {
+		conf.InitialCluster = strings.Join([]string{name, host}, "=")
+	}
 
 	e, err := embed.StartEtcd(conf)
 
