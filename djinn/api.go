@@ -3,7 +3,9 @@ package djinn
 import (
 	"context"
 	"github.com/coreos/etcd/etcdserver/etcdserverpb"
+	"github.com/coreos/etcd/etcdserver/membership"
 	"github.com/mewa/djinn/djinn/job"
+	"net/url"
 )
 
 type JobPutRequest struct {
@@ -12,6 +14,15 @@ type JobPutRequest struct {
 
 type JobPutResponse struct {
 	job.Job
+}
+
+type AddMemberRequest struct {
+	name string
+	host string
+}
+
+type AddMemberResponse struct {
+	peers []*membership.Member
 }
 
 func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
@@ -36,4 +47,18 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 	}
 
 	return resp, err
+}
+
+func (d *Djinn) AddMember(req *AddMemberRequest) (*AddMemberResponse, error) {
+	membUrl, err := url.Parse(req.host)
+	member := membership.NewMember(req.name, []url.URL{*membUrl}, d.cluster, nil)
+	resp, err := d.etcd.Server.AddMember(context.TODO(), *member)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &AddMemberResponse{
+		peers: resp,
+	}, err
 }

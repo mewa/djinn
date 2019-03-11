@@ -17,6 +17,7 @@ type Djinn struct {
 	etcd   *embed.Etcd
 	config *embed.Config
 
+	cluster      string
 	name         string
 	host         string
 	initialPeers []string
@@ -63,6 +64,7 @@ func New(name, host string, peers []string) *Djinn {
 	djinn := &Djinn{
 		config: conf,
 
+		cluster:      "default",
 		name:         name,
 		host:         host,
 		initialPeers: peers,
