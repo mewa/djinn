@@ -14,7 +14,12 @@ import (
 )
 
 type Djinn struct {
-	etcd *embed.Etcd
+	etcd   *embed.Etcd
+	config *embed.Config
+
+	name         string
+	host         string
+	initialPeers []string
 
 	cron cron.Cron
 
@@ -55,15 +60,12 @@ func New(name, host string, peers []string) *Djinn {
 		conf.InitialCluster = strings.Join([]string{name, host}, "=")
 	}
 
-	e, err := embed.StartEtcd(conf)
+	djinn := &Djinn{
+		config: conf,
 
-	if err != nil {
-		log.Error("could not start server", zap.Error(err))
-		return nil
-	}
-
-	return &Djinn{
-		etcd: e,
+		name:         name,
+		host:         host,
+		initialPeers: peers,
 
 		cron: cron.New(),
 
@@ -73,9 +75,26 @@ func New(name, host string, peers []string) *Djinn {
 		stop:    make(chan struct{}),
 		Done:    make(chan struct{}),
 	}
+
+	return djinn
 }
 
-func (d *Djinn) Start() {
+func (d *Djinn) Start() error {
+	e, err := embed.StartEtcd(d.config)
+
+	if err != nil {
+		d.log.Error(d.name+": could not start server",
+			zap.Error(err),
+			zap.String("initial-cluster", d.config.InitialCluster))
+		return err
+	}
+
+	d.etcd = e
+	go d.run()
+	return nil
+}
+
+func (d *Djinn) run() {
 	select {
 	case <-d.etcd.Server.ReadyNotify():
 		d.running = true
