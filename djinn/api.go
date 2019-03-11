@@ -6,16 +6,16 @@ import (
 	"github.com/mewa/djinn/djinn/job"
 )
 
-type JobAddRequest struct {
+type JobPutRequest struct {
 	job.Job
 }
 
-type JobAddResponse struct {
+type JobPutResponse struct {
 	job.Job
 }
 
-func (d *Djinn) Add(req *JobAddRequest) (*JobAddResponse, error) {
-	resp := &JobAddResponse{
+func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
+	resp := &JobPutResponse{
 		req.Job,
 	}
 
