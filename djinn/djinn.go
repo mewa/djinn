@@ -144,29 +144,33 @@ func (d *Djinn) Stop() {
 }
 
 func (d *Djinn) applyEvent(event mvccpb.Event) {
-	var j job.Job
-	err := job.Unmarshal(event.Kv.Value, &j)
 
-	if err != nil {
-		d.log.Error("could not unmarshal event", zap.Error(err))
+	if event.Type == mvccpb.PUT {
+		var j job.Job
+		err := job.Unmarshal(event.Kv.Value, &j)
+
+		if err != nil {
+			d.log.Error("could not unmarshal event", zap.Error(err))
+			return
+		}
+
+		j.RemoveHandler = d.deleteJob
+
+		d.putJob(&j)
 		return
 	}
-
-	j.RemoveHandler = d.removeJob
-
-	d.upsertJob(&j)
 }
 
-func (d *Djinn) upsertJob(j *job.Job) error {
-	d.cron.UpsertEntry(cron.Entry{
-		ID: cron.EntryID(j.ID),
+func (d *Djinn) putJob(j *job.Job) error {
+	d.cron.PutEntry(cron.Entry{
+		ID:       cron.EntryID(j.ID),
 		Schedule: j,
-		Next: j.NextTime,
-		Prev: j.PrevTime,
+		Next:     j.NextTime,
+		Prev:     j.PrevTime,
 	})
 	return nil
 }
 
-func (d *Djinn) removeJob(j *job.Job) {
-	d.cron.RemoveEntry(cron.EntryID(j.ID))
+func (d *Djinn) deleteJob(j *job.Job) {
+	d.cron.DeleteEntry(cron.EntryID(j.ID))
 }
