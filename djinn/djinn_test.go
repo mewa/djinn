@@ -96,7 +96,7 @@ func Test_Membership_WithJoin(t *testing.T) {
 	case <-d1.Started:
 		_, err := d1.AddMember(&AddMemberRequest{
 			name: d2.name,
-			host: d2.host,
+			host: d2.host.Scheme + "://" + d2.host.Host,
 		})
 
 		if err != nil {

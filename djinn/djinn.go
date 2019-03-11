@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap"
 	"net/http"
 	"net/url"
-	"strings"
 	"os"
+	"strings"
 )
 
 type Djinn struct {
@@ -19,7 +19,7 @@ type Djinn struct {
 
 	cluster      string
 	name         string
-	host         string
+	host         *url.URL
 	initialPeers []string
 
 	cron cron.Cron
@@ -51,12 +51,13 @@ func New(name, host string, peers []string) *Djinn {
 	conf.LCUrls = nil
 	conf.ACUrls = nil
 
-	hostUrl, err := url.Parse(host)
+	hostUrl, _ := url.Parse(host)
 	conf.APUrls = []url.URL{*hostUrl}
 	conf.LPUrls = []url.URL{*hostUrl}
 
 	if peers != nil {
 		conf.InitialCluster = strings.Join(peers, ",")
+		conf.ClusterState = "existing"
 	} else {
 		conf.InitialCluster = strings.Join([]string{name, host}, "=")
 	}
@@ -66,7 +67,7 @@ func New(name, host string, peers []string) *Djinn {
 
 		cluster:      "default",
 		name:         name,
-		host:         host,
+		host:         hostUrl,
 		initialPeers: peers,
 
 		cron: cron.New(),
