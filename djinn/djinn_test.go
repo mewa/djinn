@@ -18,7 +18,7 @@ func Test_Djinn(t *testing.T) {
 	j := job.Job{
 		ID: "test001",
 	}
-	_, err := d.Add(&JobAddRequest{
+	_, err := d.Put(&JobPutRequest{
 		j,
 	})
 
@@ -47,10 +47,19 @@ func Test_Membership_Initial(t *testing.T) {
 		"membership_test02=http://localhost:4001",
 	})
 
-	go d1.Start()
+	err := d1.Start()
 	defer d1.Stop()
-	go d2.Start()
+
+	if err != nil {
+		t.Fatalf("error starting d1: %s", err)
+	}
+
+	err = d2.Start()
 	defer d2.Stop()
+
+	if err != nil {
+		t.Fatalf("error starting d2: %s", err)
+	}
 
 	for i := 0; i < 2; {
 		select {
@@ -58,7 +67,7 @@ func Test_Membership_Initial(t *testing.T) {
 			i++
 		case <-d2.Started:
 			i++
-		case <-time.After(5000 * time.Millisecond):
+		case <-time.After(2000 * time.Millisecond):
 			if i != 2 {
 				t.Fatalf("timed out creating cluster")
 			}

@@ -25,9 +25,9 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 		return nil, err
 	}
 
-	_, err := d.etcd.Server.Put(context.TODO(), &etcdserverpb.PutRequest{
-		Key: []byte(req.Job.ID),
-		Value: val,
+	_, err = d.etcd.Server.Put(context.TODO(), &etcdserverpb.PutRequest{
+		Key:    []byte(req.Job.ID),
+		Value:  val,
 		PrevKv: true,
 	})
 
