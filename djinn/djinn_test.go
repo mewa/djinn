@@ -3,12 +3,21 @@ package djinn
 import (
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
+	"strings"
 	"testing"
 	"time"
 )
 
+func (d *Djinn) useClusterConfig(peers []string) {
+	d.config.InitialCluster = strings.Join(peers, ",")
+	d.config.DNSCluster = ""
+}
+
 func Test_Djinn(t *testing.T) {
-	d := New("add_test01", "http://localhost:4001", nil)
+	d := New("add_test01", "http://localhost:4000", "")
+	d.useClusterConfig([]string{
+		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
+	})
 
 	go d.Start()
 	defer d.Stop()
@@ -38,14 +47,8 @@ func Test_Djinn(t *testing.T) {
 }
 
 func Test_Membership_Initial(t *testing.T) {
-	d1 := New("membership_test01", "http://localhost:4000", []string{
-		"membership_test01=http://localhost:4000",
-		"membership_test02=http://localhost:4001",
-	})
-	d2 := New("membership_test02", "http://localhost:4001", []string{
-		"membership_test01=http://localhost:4000",
-		"membership_test02=http://localhost:4001",
-	})
+	d1 := New("membership_test01", "http://localhost:4000", "two.etcd.test.thedjinn.io")
+	d2 := New("membership_test02", "http://localhost:4001", "two.etcd.test.thedjinn.io")
 
 	err := d1.Start()
 	defer d1.Stop()
@@ -78,12 +81,10 @@ func Test_Membership_Initial(t *testing.T) {
 
 func Test_Membership_WithJoin(t *testing.T) {
 	// initial cluster, we don't know about future members yet
-	d1 := New("membership_test01", "http://localhost:4000", nil)
+	d1 := New("membership_test01", "http://localhost:4000", "two.etcd.test.thedjinn.io")
+
 	// add new member to an existing cluster
-	d2 := New("membership_test02", "http://localhost:4001", []string{
-		"membership_test01=http://localhost:4000",
-		"membership_test02=http://localhost:4001",
-	})
+	d2 := New("membership_test02", "http://localhost:4001", "two.etcd.test.thedjinn.io")
 
 	err := d1.Start()
 	defer d1.Stop()

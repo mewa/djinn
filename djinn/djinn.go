@@ -10,17 +10,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 )
 
 type Djinn struct {
 	etcd   *embed.Etcd
 	config *embed.Config
 
-	cluster      string
-	name         string
-	host         *url.URL
-	initialPeers []string
+	cluster string
+	name    string
+	host    *url.URL
 
 	cron cron.Cron
 
@@ -36,7 +34,7 @@ type Djinn struct {
 	Done    chan struct{}
 }
 
-func New(name, host string, peers []string) *Djinn {
+func New(name, host string, discovery string) *Djinn {
 	log, _ := zap.NewDevelopment()
 
 	conf := embed.NewConfig()
@@ -55,20 +53,15 @@ func New(name, host string, peers []string) *Djinn {
 	conf.APUrls = []url.URL{*hostUrl}
 	conf.LPUrls = []url.URL{*hostUrl}
 
-	if peers != nil {
-		conf.InitialCluster = strings.Join(peers, ",")
-		conf.ClusterState = "existing"
-	} else {
-		conf.InitialCluster = strings.Join([]string{name, host}, "=")
-	}
+	conf.InitialCluster = ""
+	conf.DNSCluster = discovery
 
 	djinn := &Djinn{
 		config: conf,
 
-		cluster:      "default",
-		name:         name,
-		host:         hostUrl,
-		initialPeers: peers,
+		cluster: "default",
+		name:    name,
+		host:    hostUrl,
 
 		cron: cron.New(),
 
