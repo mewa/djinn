@@ -28,16 +28,11 @@ func Test_Djinn(t *testing.T) {
 		ID: "test001",
 	}
 	_, err := d.Put(&JobPutRequest{
-		j,
+		Job: j,
 	})
 
 	if err != nil {
 		t.Fatalf("error: %s", err.Error())
-	}
-
-	select {
-	case <-d.Done:
-	case <-time.After(500 * time.Millisecond):
 	}
 
 	entry := d.cron.Entry(cron.EntryID(j.ID))
@@ -79,11 +74,36 @@ func Test_Membership_Initial(t *testing.T) {
 	}
 }
 
-func Test_Membership_WithJoin(t *testing.T) {
-	// initial cluster, we don't know about future members yet
-	d1 := New("membership_test01", "http://localhost:4000", "two.etcd.test.thedjinn.io")
+func Test_AddJob(t *testing.T) {
+	d := New("add_test01", "http://localhost:4000", "")
+	d.useClusterConfig([]string{
+		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
+	})
 
-	// add new member to an existing cluster
+	go d.Start()
+	defer d.Stop()
+
+	<-d.Started
+
+	j := job.Job{
+		ID: "test001",
+	}
+	_, err := d.Put(&JobPutRequest{
+		Job: j,
+	})
+
+	if err != nil {
+		t.Fatalf("error: %s", err.Error())
+	}
+
+	entry := d.cron.Entry(cron.EntryID(j.ID))
+	if entry.ID != cron.EntryID(j.ID) {
+		t.Fatalf("added entry is missing: expectedId=%s, actualId=%s", j.ID, entry.ID)
+	}
+}
+
+func Test_AddJob_2(t *testing.T) {
+	d1 := New("membership_test01", "http://localhost:4000", "two.etcd.test.thedjinn.io")
 	d2 := New("membership_test02", "http://localhost:4001", "two.etcd.test.thedjinn.io")
 
 	err := d1.Start()
@@ -93,32 +113,43 @@ func Test_Membership_WithJoin(t *testing.T) {
 		t.Fatalf("error starting d1: %s", err)
 	}
 
-	select {
-	case <-d1.Started:
-		_, err := d1.AddMember(&AddMemberRequest{
-			name: d2.name,
-			host: d2.host.Scheme + "://" + d2.host.Host,
-		})
+	err = d2.Start()
+	defer d2.Stop()
 
-		if err != nil {
-			t.Fatalf("could not add member %s", err)
-		}
-
-		// d1 is already properly configured
-		err = d2.Start()
-		defer d2.Stop()
-
-		if err != nil {
-			t.Fatalf("error starting d2: %s", err)
-		}
-
-		select {
-		case <-d2.Started:
-			return
-		case <-time.After(2000 * time.Millisecond):
-		}
-	case <-time.After(2000 * time.Millisecond):
+	if err != nil {
+		t.Fatalf("error starting d2: %s", err)
 	}
 
-	t.Fatal("timed out creating cluster")
+	for i := 0; i < 2; i++ {
+		select {
+		case <-d1.Started:
+		case <-d2.Started:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timed out")
+		}
+	}
+
+	j := job.Job{
+		ID: "test001",
+	}
+	req := &JobPutRequest{
+		Job: j,
+	}
+	_, err = d1.Put(req)
+
+	if err != nil {
+		t.Fatalf("error: %s", err.Error())
+	}
+
+	// raft log is consistent, but we're only watching changes, so
+	// they may not be applied to our cron instance
+	select {
+	case <-d2.wait.Register(req.Id):
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	entry := d2.cron.Entry(cron.EntryID(j.ID))
+	if entry.ID != cron.EntryID(j.ID) {
+		t.Fatalf("added entry is missing: expected=%s, actual=%s", j.ID, entry.ID)
+	}
 }
