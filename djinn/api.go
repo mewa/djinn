@@ -6,10 +6,13 @@ import (
 	"github.com/coreos/etcd/etcdserver/membership"
 	"github.com/mewa/djinn/djinn/job"
 	"net/url"
+	"time"
+	"encoding/json"
 )
 
 type JobPutRequest struct {
-	job.Job
+	Id      uint64 `json:"id"`
+	job.Job `json:"job"`
 }
 
 type JobPutResponse struct {
@@ -30,20 +33,34 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 		req.Job,
 	}
 
-	val, err := job.Marshal(&req.Job)
+	if req.Id == 0 {
+		req.Id = d.idGen.Next()
+	}
 
+	val, err := json.Marshal(&req)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = d.etcd.Server.Put(context.TODO(), &etcdserverpb.PutRequest{
+	ctx, _ := context.WithTimeout(context.TODO(), time.Millisecond*time.Duration(3*d.config.ElectionMs))
+	ch := d.wait.Register(req.Id)
+
+	_, err = d.etcd.Server.Put(ctx, &etcdserverpb.PutRequest{
 		Key:    []byte(req.Job.ID),
 		Value:  val,
 		PrevKv: true,
 	})
 
 	if err != nil {
+		d.wait.Trigger(req.Id, nil)
 		return nil, err
+	}
+
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		d.wait.Trigger(req.Id, nil)
+		return nil, ctx.Err()
 	}
 
 	return resp, err

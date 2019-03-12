@@ -1,9 +1,12 @@
 package djinn
 
 import (
+	"encoding/json"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/etcd/mvcc"
 	"github.com/coreos/etcd/mvcc/mvccpb"
+	"github.com/coreos/etcd/pkg/idutil"
+	"github.com/coreos/etcd/pkg/wait"
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
 	"go.uber.org/zap"
@@ -24,6 +27,8 @@ type Djinn struct {
 
 	server    *http.Server
 	schedules map[string]cron.EntryID
+	wait      wait.Wait
+	idGen     *idutil.Generator
 
 	log *zap.Logger
 
@@ -64,6 +69,7 @@ func New(name, host string, discovery string) *Djinn {
 		host:    hostUrl,
 
 		cron: cron.New(),
+		wait: wait.New(),
 
 		log: log,
 
@@ -85,6 +91,7 @@ func (d *Djinn) Start() error {
 		return err
 	}
 
+	d.idGen = idutil.NewGenerator(uint16(e.Server.ID()), time.Now())
 	d.etcd = e
 	go d.run()
 	return nil
@@ -139,17 +146,22 @@ func (d *Djinn) Stop() {
 func (d *Djinn) applyEvent(event mvccpb.Event) {
 
 	if event.Type == mvccpb.PUT {
-		var j job.Job
-		err := job.Unmarshal(event.Kv.Value, &j)
+		var req JobPutRequest
+		err := json.Unmarshal(event.Kv.Value, &req)
 
 		if err != nil {
 			d.log.Error("could not unmarshal event", zap.Error(err))
 			return
 		}
 
-		j.RemoveHandler = d.deleteJob
+		req.Job.RemoveHandler = d.deleteJob
 
-		d.putJob(&j)
+		d.putJob(&req.Job)
+		d.wait.Trigger(req.Id, req.Job)
+		return
+	}
+	if event.Type == mvccpb.DELETE {
+		panic("not implemented")
 		return
 	}
 }
