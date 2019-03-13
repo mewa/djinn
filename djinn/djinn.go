@@ -140,6 +140,7 @@ func (d *Djinn) Stop() {
 		d.stop <- struct{}{}
 		<-d.Done
 	}
+	d.cron.Stop()
 	d.running = false
 }
 
