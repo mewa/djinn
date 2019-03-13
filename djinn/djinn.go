@@ -162,7 +162,7 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 			return
 		}
 
-		req.Job.Handler = job.JobHandler{
+		req.Job.Handler = job.Handler{
 			Remove: d.deleteJob,
 			Run:    d.runJob,
 		}

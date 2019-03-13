@@ -15,7 +15,7 @@ const (
 	Done
 )
 
-type JobHandler struct {
+type Handler struct {
 	Remove func(job *Job)
 	Run    func(job *Job)
 }
@@ -32,7 +32,7 @@ type Job struct {
 
 	schedule schedule.Schedule `json:"-"`
 
-	Handler JobHandler `json:"-"`
+	Handler Handler `json:"-"`
 }
 
 func (job *Job) Schedule() schedule.Schedule {
