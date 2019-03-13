@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 )
 
 type Djinn struct {
@@ -25,10 +26,12 @@ type Djinn struct {
 
 	cron cron.Cron
 
-	server    *http.Server
-	schedules map[string]cron.EntryID
-	wait      wait.Wait
-	idGen     *idutil.Generator
+	server *http.Server
+
+	jobs map[job.ID]*job.Job
+
+	wait  wait.Wait
+	idGen *idutil.Generator
 
 	log *zap.Logger
 
@@ -69,6 +72,9 @@ func New(name, host string, discovery string) *Djinn {
 		host:    hostUrl,
 
 		cron: cron.New(),
+
+		jobs: map[job.ID]*job.Job{},
+
 		wait: wait.New(),
 
 		log: log,
@@ -129,7 +135,7 @@ func (d *Djinn) run() {
 		}
 	}
 
-	d.log.Info("djinn shutting down")
+	d.log.Info("djinn shutting down", zap.String("name", d.config.Name))
 
 	d.etcd.Close()
 	d.Done <- struct{}{}
@@ -142,6 +148,7 @@ func (d *Djinn) Stop() {
 	}
 	d.cron.Stop()
 	d.running = false
+	d.log.Info("djinn stopped", zap.String("name", d.config.Name))
 }
 
 func (d *Djinn) applyEvent(event mvccpb.Event) {
@@ -155,7 +162,10 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 			return
 		}
 
-		req.Job.RemoveHandler = d.deleteJob
+		req.Job.Handler = job.JobHandler{
+			Remove: d.deleteJob,
+			Run:    d.runJob,
+		}
 
 		d.putJob(&req.Job)
 		d.wait.Trigger(req.Id, req.Job)
@@ -168,9 +178,11 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 }
 
 func (d *Djinn) putJob(j *job.Job) error {
+	d.jobs[j.ID] = j
 	d.cron.PutEntry(cron.Entry{
 		ID:       cron.EntryID(j.ID),
 		Schedule: j,
+		Job:      j,
 		Next:     j.NextTime,
 		Prev:     j.PrevTime,
 	})
@@ -178,5 +190,8 @@ func (d *Djinn) putJob(j *job.Job) error {
 }
 
 func (d *Djinn) deleteJob(j *job.Job) {
+	delete(d.jobs, j.ID)
 	d.cron.DeleteEntry(cron.EntryID(j.ID))
 }
+
+func (d *Djinn) runJob(j *job.Job) {}

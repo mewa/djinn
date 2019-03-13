@@ -15,6 +15,11 @@ const (
 	Done
 )
 
+type JobHandler struct {
+	Remove func(job *Job)
+	Run    func(job *Job)
+}
+
 type Job struct {
 	ID ID `json:"id"`
 
@@ -25,8 +30,9 @@ type Job struct {
 	NextTime time.Time `json:"next"`
 	PrevTime time.Time `json:"prev"`
 
-	schedule      schedule.Schedule `json:"-"`
-	RemoveHandler func(job *Job)    `json:"-"`
+	schedule schedule.Schedule `json:"-"`
+
+	Handler JobHandler `json:"-"`
 }
 
 func (job *Job) Schedule() schedule.Schedule {
@@ -41,11 +47,15 @@ func (job *Job) Next(t time.Time) time.Time {
 
 	if next.IsZero() {
 		if job.State == Done {
-			go job.RemoveHandler(job)
+			go job.Handler.Remove(job)
 		}
 		return next
 	}
 	job.PrevTime = job.NextTime
 	job.NextTime = next
 	return next
+}
+
+func (job *Job) Run() {
+	job.Handler.Run(job)
 }
