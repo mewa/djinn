@@ -1,22 +1,48 @@
 package schedule
 
 import (
+	"errors"
 	"time"
 )
 
-type Once struct {
-	t time.Time
-	ran bool
+type Schedule interface {
+	Next(time.Time) time.Time
 }
 
-func RunOnce(t time.Time) *Once {
-	return &Once{t, false}
+type SchedType uint16
+
+type Serializable interface {
+	Serialize() string
+	Deserialize(string) error
 }
 
-func (im * Once) Next(t time.Time) time.Time {
-	if !im.ran {
-		im.ran = true
-		return im.t
+type SerializableSchedule interface {
+	Schedule
+	Serializable
+}
+
+const (
+	once SchedType = iota
+	spec
+)
+
+type JSONSchedule struct {
+	ScheduleType SchedType `json:"type"`
+	ScheduleData string    `json:"schedule"`
+}
+
+func (js JSONSchedule) Schedule() (SerializableSchedule, error) {
+	switch js.ScheduleType {
+	case once:
+		sched := new(OnceSchedule)
+		return sched, sched.Deserialize(js.ScheduleData)
+	case spec:
+		sched := new(SpecSchedule)
+		return sched, sched.Deserialize(js.ScheduleData)
 	}
-	return time.Time{}
+	return nil, ErrUnknownScheduleType
 }
+
+var (
+	ErrUnknownScheduleType = errors.New("unknown schedule type")
+)

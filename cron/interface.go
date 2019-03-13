@@ -1,12 +1,9 @@
 package cron
 
 import (
+	"github.com/mewa/djinn/schedule"
 	"time"
 )
-
-type Schedule interface {
-	Next(time.Time) time.Time
-}
 
 type EntryID string
 
@@ -14,7 +11,7 @@ type Entry struct {
 	// has to be unique for cron instance
 	ID EntryID
 
-	Schedule Schedule
+	Schedule schedule.Schedule
 
 	Prev time.Time
 	Next time.Time
