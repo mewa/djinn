@@ -20,7 +20,7 @@ func (im *OnceSchedule) Next(t time.Time) time.Time {
 		im.ran = true
 		return im.t
 	}
-	return time.Time{}
+	return Abort
 }
 
 func (im *OnceSchedule) Serialize() string {

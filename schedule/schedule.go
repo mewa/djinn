@@ -9,6 +9,10 @@ type Schedule interface {
 	Next(time.Time) time.Time
 }
 
+var (
+	Abort time.Time
+)
+
 type SchedType uint16
 
 type Serializable interface {
