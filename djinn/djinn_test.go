@@ -164,7 +164,58 @@ func Test_AddJob_2(t *testing.T) {
 	}
 }
 
-func Test_ExecuteJob_1(t *testing.T) {
+func Test_ExecuteJob_Once_1(t *testing.T) {
+	store := newStorage()
+	d := New("execute_once_test", "http://localhost:4000", "")
+	d.useClusterConfig([]string{
+		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
+	})
+	d.storage = store
+
+	err := d.Start()
+	defer d.Stop()
+
+	if err != nil {
+		t.Fatalf("error starting djinn: %s", err)
+	}
+
+	select {
+	case <-d.Started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out")
+	}
+
+	exec := time.Now()
+	j := job.Job{
+		ID: "test-execute-once-job",
+		Descriptor: schedule.JSONSchedule{
+			ScheduleType: 0,
+			ScheduleData: exec.Format(time.RFC3339),
+		},
+	}
+	req := &JobPutRequest{
+		Job: j,
+	}
+
+	_, err = d.Put(req)
+
+	if err != nil {
+		t.Fatal("error", err)
+	}
+
+	delay := 2200
+	delayC := time.After(time.Duration(delay) * time.Millisecond)
+
+	<-delayC
+	actual := store.states[j.ID]
+	expected := []job.State{job.State{job.Starting, exec.Unix()}, job.State{job.Started, exec.Unix()}}
+
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("invalid job states: expected='%v', actual='%v'", expected, actual)
+	}
+}
+
+func Test_ExecuteJob_Cron_1(t *testing.T) {
 	store := newStorage()
 	d := New("execute_test", "http://localhost:4000", "")
 	d.useClusterConfig([]string{
