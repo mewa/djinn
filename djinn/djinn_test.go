@@ -3,7 +3,11 @@ package djinn
 import (
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
+	"github.com/mewa/djinn/schedule"
+	"math"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -13,32 +17,30 @@ func (d *Djinn) useClusterConfig(peers []string) {
 	d.config.DNSCluster = ""
 }
 
-func Test_Djinn(t *testing.T) {
-	d := New("add_test01", "http://localhost:4000", "")
-	d.useClusterConfig([]string{
-		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
-	})
-
-	go d.Start()
-	defer d.Stop()
-
-	<-d.Started
-
-	j := job.Job{
-		ID: "test001",
+func leader(djinns ...*Djinn) *Djinn {
+	for _, djinn := range djinns {
+		if djinn.etcd.Server.Leader() == djinn.etcd.Server.ID() {
+			return djinn
+		}
 	}
-	_, err := d.Put(&JobPutRequest{
-		Job: j,
-	})
+	return nil
+}
 
-	if err != nil {
-		t.Fatalf("error: %s", err.Error())
-	}
+func newStorage() *testStorage {
+	return &testStorage{map[job.ID][]job.State{}, new(sync.Mutex)}
+}
 
-	entry := d.cron.Entry(cron.EntryID(j.ID))
-	if entry.ID != cron.EntryID(j.ID) {
-		t.Fatalf("added entry is missing: expectedId=%s, actualId=%s", j.ID, entry.ID)
-	}
+type testStorage struct {
+	states map[job.ID][]job.State
+	mu     *sync.Mutex
+}
+
+func (s *testStorage) SaveJobState(id job.ID, state job.State) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	val := s.states[id]
+	s.states[id] = append(val, state)
 }
 
 func Test_Membership_Initial(t *testing.T) {
@@ -86,7 +88,11 @@ func Test_AddJob(t *testing.T) {
 	<-d.Started
 
 	j := job.Job{
-		ID: "test001",
+		ID: "test-add-job",
+		Descriptor: schedule.JSONSchedule{
+			ScheduleType: 1,
+			ScheduleData: "* * * * * *",
+		},
 	}
 	_, err := d.Put(&JobPutRequest{
 		Job: j,
@@ -130,7 +136,11 @@ func Test_AddJob_2(t *testing.T) {
 	}
 
 	j := job.Job{
-		ID: "test001",
+		ID: "test-add-job-2",
+		Descriptor: schedule.JSONSchedule{
+			ScheduleType: 1,
+			ScheduleData: "* * * * * *",
+		},
 	}
 	req := &JobPutRequest{
 		Job: j,
@@ -151,5 +161,76 @@ func Test_AddJob_2(t *testing.T) {
 	entry := d2.cron.Entry(cron.EntryID(j.ID))
 	if entry.ID != cron.EntryID(j.ID) {
 		t.Fatalf("added entry is missing: expected=%s, actual=%s", j.ID, entry.ID)
+	}
+}
+
+func Test_ExecuteJob_1(t *testing.T) {
+	store := newStorage()
+	d := New("execute_test", "http://localhost:4000", "")
+	d.useClusterConfig([]string{
+		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
+	})
+	d.storage = store
+
+	err := d.Start()
+	defer d.Stop()
+
+	if err != nil {
+		t.Fatalf("error starting djinn: %s", err)
+	}
+
+	select {
+	case <-d.Started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out")
+	}
+
+	j := job.Job{
+		ID: "test-execute-job",
+		Descriptor: schedule.JSONSchedule{
+			ScheduleType: 1,
+			ScheduleData: "* * * * * *",
+		},
+	}
+	req := &JobPutRequest{
+		Job: j,
+	}
+
+	resp, err := d.Put(req)
+
+	if err != nil {
+		t.Fatal("error", err)
+	}
+
+	firstExec := time.Unix(resp.Next, 0)
+
+	delay := 2200
+	delayC := time.After(time.Duration(delay) * time.Millisecond)
+
+	<-delayC
+	actual := store.states[j.ID]
+	expected := []job.State{}
+
+	for i := 1; i <= int(math.Ceil(float64(delay)/float64(1000))); i = i + 1 {
+		expected = append(expected, job.State{
+			job.Starting,
+			firstExec.Add(time.Duration(i) * time.Second).Unix(),
+		})
+		expected = append(expected, job.State{
+			job.Started,
+			firstExec.Add(time.Duration(i) * time.Second).Unix(),
+		})
+	}
+
+	if len(expected) - len(actual) > 2 {
+		t.Fatal("too big execution drift")
+	}
+
+	if len(expected) - len(actual) >= 2 {
+		t.Log("execution drift:", len(expected) - len(actual))
+	}
+
+	if !reflect.DeepEqual(expected[:len(actual)], actual) {
+		t.Fatalf("invalid job states: expected='%v', actual='%v'", expected, actual)
 	}
 }
