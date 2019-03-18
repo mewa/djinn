@@ -1,19 +1,27 @@
 package job
 
 import (
+	"fmt"
 	"github.com/mewa/djinn/schedule"
 	"time"
+	"encoding/json"
 )
 
 type ID string
 
-type State uint8
+type state uint8
 
 const (
-	Initial State = iota
+	Initial state = iota
+	Starting
 	Started
-	Done
+	Error
 )
+
+type State struct {
+	State state
+	Time int64
+}
 
 type Handler struct {
 	Remove func(job *Job)
@@ -46,7 +54,7 @@ func (job *Job) Next(t time.Time) time.Time {
 	next := job.Schedule().Next(t)
 
 	if next.IsZero() {
-		if job.State == Done {
+		if job.State.State == Started {
 			go job.Handler.Remove(job)
 		}
 		return next
