@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/mewa/djinn/schedule"
 	"time"
-	"encoding/json"
 )
 
 type ID string
@@ -20,7 +19,7 @@ const (
 
 type State struct {
 	State state
-	Time int64
+	Time  int64
 }
 
 type Handler struct {
@@ -66,4 +65,24 @@ func (job *Job) Next(t time.Time) time.Time {
 
 func (job *Job) Run() {
 	job.Handler.Run(job)
+}
+
+func (s State) String() string {
+	return fmt.Sprintf("{%s@%s}", time.Unix(s.Time, 0), s.State)
+}
+
+func (s state) String() string {
+	switch s {
+	case Initial:
+		return "initial"
+	case Starting:
+		return "starting"
+	case Started:
+		return "started"
+	}
+	return "unknown"
+}
+
+func (job *Job) String() string {
+	return fmt.Sprintf("{id=%s, state=%s, descriptor=%v, next=%s, prev=%s}", job.ID, job.State, job.Descriptor, job.NextTime, job.PrevTime)
 }
