@@ -9,6 +9,7 @@ import (
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
+	"github.com/mewa/djinn/storage"
 	"go.uber.org/zap"
 	"net/http"
 	"net/url"
@@ -24,7 +25,8 @@ type Djinn struct {
 	name    string
 	host    *url.URL
 
-	cron cron.Cron
+	cron    cron.Cron
+	storage storage.Storage
 
 	server *http.Server
 
@@ -178,14 +180,20 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 }
 
 func (d *Djinn) putJob(j *job.Job) error {
-	d.jobs[j.ID] = j
-	d.cron.PutEntry(cron.Entry{
-		ID:       cron.EntryID(j.ID),
-		Schedule: j,
-		Job:      j,
-		Next:     j.NextTime,
-		Prev:     j.PrevTime,
-	})
+	saved, exists := d.jobs[j.ID]
+
+	if !exists {
+		d.jobs[j.ID] = j
+		d.cron.PutEntry(cron.Entry{
+			ID:       cron.EntryID(j.ID),
+			Schedule: j,
+			Job:      j,
+			Next:     j.NextTime,
+			Prev:     j.PrevTime,
+		})
+	} else {
+		*saved = *j
+	}
 	return nil
 }
 
@@ -194,4 +202,50 @@ func (d *Djinn) deleteJob(j *job.Job) {
 	d.cron.DeleteEntry(cron.EntryID(j.ID))
 }
 
-func (d *Djinn) runJob(j *job.Job) {}
+func (d *Djinn) runJob(j *job.Job) {
+	if !d.isLeader() {
+		return
+	}
+
+	// TODO: this doesn't take care of leadership losses while in between states
+	if j.State.State == job.Initial || j.State.State == job.Started {
+		req := &JobPutRequest{
+			Job: *j,
+		}
+		req.Job.State = job.State{job.Starting, j.NextTime.Unix()}
+		_, err := d.Put(req)
+		if err != nil {
+			d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
+			d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+		} else {
+			d.storage.SaveJobState(j.ID, req.Job.State)
+		}
+
+		go func(j *job.Job) {
+			// TODO: handle job execution failures
+			d.executeJob(j)
+
+			req = &JobPutRequest{
+				Job: *j,
+			}
+			req.Job.State.State = job.Started
+
+			_, err = d.Put(req)
+			if err != nil {
+				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
+				d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+			} else {
+				d.storage.SaveJobState(j.ID, req.Job.State)
+			}
+		}(j)
+	}
+}
+
+func (d *Djinn) executeJob(j *job.Job) error {
+	// TODO: add implementation
+	return nil
+}
+
+func (d *Djinn) isLeader() bool {
+	return d.etcd.Server.ID() == d.etcd.Server.Leader()
+}
