@@ -2,12 +2,12 @@ package djinn
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/coreos/etcd/etcdserver/etcdserverpb"
 	"github.com/coreos/etcd/etcdserver/membership"
 	"github.com/mewa/djinn/djinn/job"
 	"net/url"
 	"time"
-	"encoding/json"
 )
 
 type JobPutRequest struct {
@@ -16,7 +16,7 @@ type JobPutRequest struct {
 }
 
 type JobPutResponse struct {
-	job.Job
+	Next int64 `json:"next_execution"`
 }
 
 type AddMemberRequest struct {
@@ -29,10 +29,6 @@ type AddMemberResponse struct {
 }
 
 func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
-	resp := &JobPutResponse{
-		req.Job,
-	}
-
 	if req.Id == 0 {
 		req.Id = d.idGen.Next()
 	}
@@ -56,11 +52,17 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 		return nil, err
 	}
 
+	var j job.Job
 	select {
-	case <-ch:
+	case val := <-ch:
+		j = val.(job.Job)
 	case <-ctx.Done():
 		d.wait.Trigger(req.Id, nil)
 		return nil, ctx.Err()
+	}
+
+	resp := &JobPutResponse{
+		Next: j.NextTime.Unix(),
 	}
 
 	return resp, err
