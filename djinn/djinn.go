@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -43,6 +44,8 @@ type Djinn struct {
 	Started chan struct{}
 	stop    chan struct{}
 	Done    chan struct{}
+
+	mu *sync.Mutex
 }
 
 func New(name, host string, discovery string) *Djinn {
@@ -86,12 +89,17 @@ func New(name, host string, discovery string) *Djinn {
 		Started: make(chan struct{}, 1),
 		stop:    make(chan struct{}),
 		Done:    make(chan struct{}),
+
+		mu: new(sync.Mutex),
 	}
 
 	return djinn
 }
 
 func (d *Djinn) Start() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	e, err := embed.StartEtcd(d.config)
 
 	if err != nil {
@@ -156,6 +164,8 @@ func (d *Djinn) Stop() {
 }
 
 func (d *Djinn) applyEvent(event mvccpb.Event) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
 	if event.Type == mvccpb.PUT {
 		var req JobPutRequest
@@ -205,6 +215,9 @@ func (d *Djinn) deleteJob(j *job.Job) {
 }
 
 func (d *Djinn) runJob(j *job.Job) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if !d.isLeader() {
 		return
 	}
