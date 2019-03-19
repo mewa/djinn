@@ -2,12 +2,15 @@ package cron
 
 import (
 	c "github.com/mewa/cron"
+	"sync"
 )
 
 type cron struct {
 	cron     *c.Cron
 	entries  map[EntryID]*Entry
 	entryIds map[EntryID]c.EntryID
+
+	mu *sync.RWMutex
 }
 
 func New() *cron {
@@ -15,10 +18,14 @@ func New() *cron {
 		cron:     c.New(),
 		entries:  map[EntryID]*Entry{},
 		entryIds: map[EntryID]c.EntryID{},
+		mu:       new(sync.RWMutex),
 	}
 }
 
 func (c *cron) PutEntry(entry Entry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	id := c.cron.Schedule(entry.Schedule, entry.Job)
 
 	c.entries[entry.ID] = &entry
@@ -26,6 +33,9 @@ func (c *cron) PutEntry(entry Entry) {
 }
 
 func (c *cron) DeleteEntry(id EntryID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	cid, ok := c.entryIds[id]
 	if ok {
 		c.cron.Remove(cid)
@@ -35,6 +45,9 @@ func (c *cron) DeleteEntry(id EntryID) {
 }
 
 func (c *cron) Entry(id EntryID) *Entry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
 	if entry := c.entries[id]; entry != nil {
 		return entry
 	}
@@ -42,9 +55,15 @@ func (c *cron) Entry(id EntryID) *Entry {
 }
 
 func (c *cron) Start() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.cron.Start()
 }
 
 func (c *cron) Stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	c.cron.Stop()
 }
