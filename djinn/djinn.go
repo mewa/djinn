@@ -204,7 +204,7 @@ func (d *Djinn) putJob(j *job.Job) error {
 			Prev:     j.PrevTime,
 		})
 	} else {
-		*saved = *j
+		saved.Update(j)
 	}
 	return nil
 }

@@ -57,15 +57,27 @@ func (job *Job) Schedule() schedule.Schedule {
 	return job.schedule
 }
 
+func (job *Job) Update(with *Job) {
+	job.State = with.State
+	job.NextTime = with.NextTime
+	job.PrevTime = with.PrevTime
+
+	if job.Descriptor != with.Descriptor {
+		job.Descriptor = with.Descriptor
+		sched, _ := job.Descriptor.Schedule()
+
+		job.schedule = sched
+	}
+}
+
 func (job *Job) Next(t time.Time) time.Time {
 	next := job.Schedule().Next(t)
 
+	// that's a no-op
 	if next.IsZero() {
-		if job.State.State == Started {
-			go job.Handler.Remove(job)
-		}
 		return next
 	}
+
 	job.PrevTime = job.NextTime
 	job.NextTime = next
 	return next
