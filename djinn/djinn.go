@@ -30,7 +30,8 @@ type Djinn struct {
 
 	server *http.Server
 
-	jobs map[job.ID]*job.Job
+	jobs     map[job.ID]*job.Job
+	progress map[job.ID]bool
 
 	wait  wait.Wait
 	idGen *idutil.Generator
@@ -75,7 +76,8 @@ func New(name, host string, discovery string) *Djinn {
 
 		cron: cron.New(),
 
-		jobs: map[job.ID]*job.Job{},
+		jobs:     map[job.ID]*job.Job{},
+		progress: map[job.ID]bool{},
 
 		wait: wait.New(),
 
@@ -207,21 +209,36 @@ func (d *Djinn) runJob(j *job.Job) {
 		return
 	}
 
-	// TODO: this doesn't take care of leadership losses while in between states
-	if j.State.State == job.Initial || j.State.State == job.Started {
-		req := &JobPutRequest{
-			Job: *j,
-		}
-		req.Job.State = job.State{job.Starting, j.NextTime.Unix()}
-		_, err := d.Put(req)
-		if err != nil {
-			d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
-			d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
-		} else {
-			d.storage.SaveJobState(j.ID, req.Job.State)
-		}
+	running := d.progress[j.ID]
+	if running {
+		d.log.Info("job in progress, skipping", zap.String("name", d.config.Name), zap.Stringer("job", j))
+		return
+	}
+	d.progress[j.ID] = true
 
-		go func(j *job.Job) {
+	go func(j *job.Job) {
+		defer func() {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			d.progress[j.ID] = false
+		}()
+
+		d.log.Info("running job", zap.String("name", d.config.Name), zap.Stringer("job", j))
+		// TODO: this doesn't take care of leadership losses while in between states
+		if j.State.State == job.Initial || j.State.State == job.Started {
+			req := &JobPutRequest{
+				Job: *j,
+			}
+			req.Job.State = job.State{job.Starting, j.NextTime.Unix()}
+			_, err := d.Put(req)
+			if err != nil {
+				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
+				d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+				return
+			} else {
+				d.storage.SaveJobState(j.ID, req.Job.State)
+			}
+
 			// TODO: handle job execution failures
 			d.executeJob(j)
 
@@ -237,8 +254,12 @@ func (d *Djinn) runJob(j *job.Job) {
 			} else {
 				d.storage.SaveJobState(j.ID, req.Job.State)
 			}
-		}(j)
-	}
+
+			if j.Schedule().Next(time.Now()).IsZero() {
+				d.deleteJob(j)
+			}
+		}
+	}(j)
 }
 
 func (d *Djinn) executeJob(j *job.Job) error {
