@@ -9,7 +9,7 @@ func Test_Schedule_Serialize_Once(t *testing.T) {
 	now := time.Now()
 	now = now.Truncate(time.Second)
 
-	sched := JSONSchedule{once, now.Format(timeFormat)}
+	sched := JSONSchedule{once, Once(now).Serialize()}
 
 	s, err := sched.Schedule()
 	if err != nil {
@@ -17,7 +17,7 @@ func Test_Schedule_Serialize_Once(t *testing.T) {
 	}
 
 	once := s.(*OnceSchedule)
-	if once.t != now {
-		t.Fatalf("failed to deserialize schedule: expected='%s', actual='%s'", now, once.t)
+	if once.Time != now {
+		t.Fatalf("failed to deserialize schedule: expected='%s', actual='%s'", now, once.Time)
 	}
 }
