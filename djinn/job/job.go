@@ -27,6 +27,14 @@ type Handler struct {
 	Run    func(job *Job)
 }
 
+type BeforeJobber interface {
+	BeforeJob()
+}
+
+type AfterJobber interface {
+	AfterJob()
+}
+
 type Job struct {
 	ID ID `json:"id"`
 
@@ -64,7 +72,17 @@ func (job *Job) Next(t time.Time) time.Time {
 }
 
 func (job *Job) Run() {
+	switch b := job.schedule.(type) {
+	case BeforeJobber:
+		b.BeforeJob()
+	}
+
 	job.Handler.Run(job)
+
+	switch a := job.schedule.(type) {
+	case AfterJobber:
+		a.AfterJob()
+	}
 }
 
 func (s State) String() string {
