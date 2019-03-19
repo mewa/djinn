@@ -112,6 +112,10 @@ func Test_AddJob_2(t *testing.T) {
 	d1 := New("membership_test01", "http://localhost:4000", "two.etcd.test.thedjinn.io")
 	d2 := New("membership_test02", "http://localhost:4001", "two.etcd.test.thedjinn.io")
 
+	store := newStorage()
+	d1.storage = store
+	d2.storage = store
+
 	err := d1.Start()
 	defer d1.Stop()
 
@@ -190,7 +194,7 @@ func Test_ExecuteJob_Once_1(t *testing.T) {
 		ID: "test-execute-once-job",
 		Descriptor: schedule.JSONSchedule{
 			ScheduleType: 0,
-			ScheduleData: exec.Format(time.RFC3339),
+			ScheduleData: schedule.Once(exec).Serialize(),
 		},
 	}
 	req := &JobPutRequest{
