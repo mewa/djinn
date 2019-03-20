@@ -61,8 +61,10 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 		return nil, ctx.Err()
 	}
 
+	// TODO: replace with actual execution time as calculated by
+	// the cron instance
 	resp := &JobPutResponse{
-		Next: j.NextTime.Unix(),
+		Next: j.Next(time.Now()).Unix(),
 	}
 
 	return resp, err
