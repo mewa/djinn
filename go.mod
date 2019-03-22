@@ -16,7 +16,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.7.0 // indirect
 	github.com/jonboulle/clockwork v0.1.0 // indirect
-	github.com/mewa/cron v0.0.0-20190220154327-16056e83d889
+	github.com/mewa/cron v0.0.0-20190319002810-5d14983a4d0e
 	github.com/prometheus/client_golang v0.9.2 // indirect
 	github.com/sirupsen/logrus v1.3.0 // indirect
 	github.com/soheilhy/cmux v0.1.4 // indirect
