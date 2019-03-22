@@ -16,7 +16,7 @@ type Entry struct {
 	ID EntryID
 
 	Schedule schedule.Schedule
-	Job Job
+	Job      Job
 
 	Prev time.Time
 	Next time.Time

@@ -125,7 +125,6 @@ func (d *Djinn) Start() error {
 	d.idGen = idutil.NewGenerator(uint16(e.Server.ID()), time.Now())
 	d.etcd = e
 
-
 	err = d.Serve()
 	if err != nil {
 		d.log.Error("could not start API server", zap.String("name", d.config.Name), zap.String("url", d.apiServer), zap.Error(err))

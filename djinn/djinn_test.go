@@ -274,12 +274,12 @@ func Test_ExecuteJob_Cron_1(t *testing.T) {
 		})
 	}
 
-	if len(expected) - len(actual) > 2 {
+	if len(expected)-len(actual) > 2 {
 		t.Fatal("too big execution drift")
 	}
 
-	if len(expected) - len(actual) >= 2 {
-		t.Log("execution drift:", len(expected) - len(actual))
+	if len(expected)-len(actual) >= 2 {
+		t.Log("execution drift:", len(expected)-len(actual))
 	}
 
 	if !reflect.DeepEqual(expected[:len(actual)], actual) {
