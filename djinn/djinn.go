@@ -24,6 +24,7 @@ type Djinn struct {
 
 	cluster string
 	name    string
+	apiServer *url.URL
 	host    *url.URL
 
 	cron    cron.Cron
@@ -48,7 +49,7 @@ type Djinn struct {
 	mu *sync.Mutex
 }
 
-func New(name, host string, discovery string) *Djinn {
+func New(name, host, apiServer, discovery string, storage storage.Storage) *Djinn {
 	log, _ := zap.NewDevelopment()
 
 	conf := embed.NewConfig()
@@ -64,18 +65,25 @@ func New(name, host string, discovery string) *Djinn {
 	conf.ACUrls = nil
 
 	hostUrl, _ := url.Parse(host)
+
 	conf.APUrls = []url.URL{*hostUrl}
 	conf.LPUrls = []url.URL{*hostUrl}
 
 	conf.InitialCluster = ""
 	conf.DNSCluster = discovery
 
+	apiUrl, _ := url.Parse(apiServer)
+
 	djinn := &Djinn{
 		config: conf,
+
+		apiServer: apiUrl,
 
 		cluster: "default",
 		name:    name,
 		host:    hostUrl,
+
+		storage: storage,
 
 		cron: cron.New(),
 
@@ -116,6 +124,8 @@ func (d *Djinn) Start() error {
 }
 
 func (d *Djinn) run() {
+	d.Serve()
+
 	select {
 	case <-d.etcd.Server.ReadyNotify():
 		d.running = true
