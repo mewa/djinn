@@ -44,8 +44,9 @@ func (s *testStorage) SaveJobState(id job.ID, state job.State) {
 }
 
 func Test_Membership_Initial(t *testing.T) {
-	d1 := New("membership_test01", "http://localhost:4000", "localhost:4444", "two.etcd.test.thedjinn.io", newStorage())
-	d2 := New("membership_test02", "http://localhost:4001", "localhost:4445", "two.etcd.test.thedjinn.io", newStorage())
+	d1, _ := New("membership_test01", "http://localhost:4000", "localhost:4444", "two.etcd.test.thedjinn.io", newStorage())
+
+	d2, _ := New("membership_test02", "http://localhost:4001", "localhost:4445", "two.etcd.test.thedjinn.io", newStorage())
 
 	err := d1.Start()
 	defer d1.Stop()
@@ -77,7 +78,7 @@ func Test_Membership_Initial(t *testing.T) {
 }
 
 func Test_AddJob(t *testing.T) {
-	d := New("add_test01", "http://localhost:4000", "localhost:4444", "", newStorage())
+	d, _ := New("add_test01", "http://localhost:4000", "localhost:4444", "", newStorage())
 	d.useClusterConfig([]string{
 		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
 	})
@@ -111,8 +112,8 @@ func Test_AddJob(t *testing.T) {
 func Test_AddJob_2(t *testing.T) {
 	store := newStorage()
 
-	d1 := New("membership_test01", "http://localhost:4000", "localhost:4444", "two.etcd.test.thedjinn.io", store)
-	d2 := New("membership_test02", "http://localhost:4001", "localhost:4445", "two.etcd.test.thedjinn.io", store)
+	d1, _ := New("membership_test01", "http://localhost:4000", "localhost:4444", "two.etcd.test.thedjinn.io", store)
+	d2, _ := New("membership_test02", "http://localhost:4001", "localhost:4445", "two.etcd.test.thedjinn.io", store)
 
 	err := d1.Start()
 	defer d1.Stop()
@@ -168,7 +169,7 @@ func Test_AddJob_2(t *testing.T) {
 
 func Test_ExecuteJob_Once_1(t *testing.T) {
 	store := newStorage()
-	d := New("execute_once_test", "http://localhost:4000", "localhost:4444", "", store)
+	d, _ := New("execute_once_test", "http://localhost:4000", "localhost:4444", "", store)
 	d.useClusterConfig([]string{
 		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
 	})
@@ -218,7 +219,7 @@ func Test_ExecuteJob_Once_1(t *testing.T) {
 
 func Test_ExecuteJob_Cron_1(t *testing.T) {
 	store := newStorage()
-	d := New("execute_test", "http://localhost:4000", "localhost:4444", "", store)
+	d, _ := New("execute_test", "http://localhost:4000", "localhost:4444", "", store)
 	d.useClusterConfig([]string{
 		strings.Join([]string{d.name, d.host.Scheme + "://" + d.host.Host}, "="),
 	})

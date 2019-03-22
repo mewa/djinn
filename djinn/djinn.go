@@ -49,7 +49,7 @@ type Djinn struct {
 	mu *sync.Mutex
 }
 
-func New(name, host, apiServer, discovery string, storage storage.Storage) *Djinn {
+func New(name, host, apiServer, discovery string, storage storage.Storage) (*Djinn, error) {
 	log, _ := zap.NewDevelopment()
 
 	conf := embed.NewConfig()
@@ -58,13 +58,20 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) *Djin
 	conf.Dir = "/tmp/djinn/" + name
 
 	// we don't want to persist data on disk
-	os.RemoveAll(conf.Dir)
+	err := os.RemoveAll(conf.Dir)
+
+	if err != nil {
+		return nil, err
+	}
 
 	// disable client access
 	conf.LCUrls = nil
 	conf.ACUrls = nil
 
 	hostUrl, _ := url.Parse(host)
+	if err != nil {
+		return nil, err
+	}
 
 	conf.APUrls = []url.URL{*hostUrl}
 	conf.LPUrls = []url.URL{*hostUrl}
@@ -72,7 +79,10 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) *Djin
 	conf.InitialCluster = ""
 	conf.DNSCluster = discovery
 
-	apiUrl, _ := url.Parse(apiServer)
+	apiUrl, err := url.Parse(apiServer)
+	if err != nil {
+		return nil, err
+	}
 
 	djinn := &Djinn{
 		config: conf,
@@ -101,7 +111,7 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) *Djin
 		mu: new(sync.Mutex),
 	}
 
-	return djinn
+	return djinn, nil
 }
 
 func (d *Djinn) Start() error {
