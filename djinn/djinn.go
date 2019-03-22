@@ -22,10 +22,10 @@ type Djinn struct {
 	etcd   *embed.Etcd
 	config *embed.Config
 
-	cluster string
-	name    string
-	apiServer *url.URL
-	host    *url.URL
+	cluster   string
+	name      string
+	apiServer string
+	host      *url.URL
 
 	cron    cron.Cron
 	storage storage.Storage
@@ -79,15 +79,10 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) (*Dji
 	conf.InitialCluster = ""
 	conf.DNSCluster = discovery
 
-	apiUrl, err := url.Parse(apiServer)
-	if err != nil {
-		return nil, err
-	}
-
 	djinn := &Djinn{
 		config: conf,
 
-		apiServer: apiUrl,
+		apiServer: apiServer,
 
 		cluster: "default",
 		name:    name,
@@ -129,13 +124,21 @@ func (d *Djinn) Start() error {
 
 	d.idGen = idutil.NewGenerator(uint16(e.Server.ID()), time.Now())
 	d.etcd = e
+
+
+	err = d.Serve()
+	if err != nil {
+		d.log.Error("could not start API server", zap.String("name", d.config.Name), zap.String("url", d.apiServer), zap.Error(err))
+		return err
+	} else {
+		d.log.Info("API server up and running", zap.String("name", d.config.Name), zap.String("url", d.apiServer))
+	}
+
 	go d.run()
 	return nil
 }
 
 func (d *Djinn) run() {
-	d.Serve()
-
 	select {
 	case <-d.etcd.Server.ReadyNotify():
 		d.running = true
