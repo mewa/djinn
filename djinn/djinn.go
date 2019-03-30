@@ -25,7 +25,8 @@ type Djinn struct {
 	cluster   string
 	name      string
 	apiServer string
-	host      *url.URL
+
+	host *url.URL
 
 	cron    cron.Cron
 	storage storage.Storage
@@ -64,17 +65,10 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) (*Dji
 		return nil, err
 	}
 
-	// disable client access
-	conf.LCUrls = nil
-	conf.ACUrls = nil
-
-	hostUrl, _ := url.Parse(host)
+	hostUrl, err := url.Parse(host)
 	if err != nil {
 		return nil, err
 	}
-
-	conf.APUrls = []url.URL{*hostUrl}
-	conf.LPUrls = []url.URL{*hostUrl}
 
 	conf.InitialCluster = ""
 	conf.DNSCluster = discovery
@@ -112,6 +106,11 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) (*Dji
 func (d *Djinn) Start() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+
+	err := d.configure()
+	if err != nil {
+		return err
+	}
 
 	e, err := embed.StartEtcd(d.config)
 
