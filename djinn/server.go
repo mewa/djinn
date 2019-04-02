@@ -9,6 +9,12 @@ import (
 	"net/http"
 )
 
+type StatusResponse struct {
+	Running bool   `json:"running"`
+	Name    string `json:"name"`
+	Host    string `json:"host"`
+}
+
 func (d *Djinn) statusHandler(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.Marshal(StatusResponse{
 		Running: d.running,
