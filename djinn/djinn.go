@@ -266,11 +266,18 @@ func (d *Djinn) runJob(j *job.Job) {
 			req.Job.State = job.State{job.Starting, j.NextTime.Unix()}
 			_, err := d.Put(req)
 			if err != nil {
-				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
-				d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+
+				err = d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+				if err != nil {
+					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 				return
 			} else {
-				d.storage.SaveJobState(j.ID, req.Job.State)
+				err = d.storage.SaveJobState(j.ID, req.Job.State)
+				if err != nil {
+					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 			}
 
 			// TODO: handle job execution failures
@@ -284,9 +291,16 @@ func (d *Djinn) runJob(j *job.Job) {
 			_, err = d.Put(req)
 			if err != nil {
 				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
-				d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+
+				err = d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
+				if err != nil {
+					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 			} else {
-				d.storage.SaveJobState(j.ID, req.Job.State)
+				err = d.storage.SaveJobState(j.ID, req.Job.State)
+				if err != nil {
+					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 			}
 
 			if j.Schedule().Next(time.Now()).IsZero() {

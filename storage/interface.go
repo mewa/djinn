@@ -5,5 +5,5 @@ import (
 )
 
 type Storage interface {
-	SaveJobState(id job.ID, state job.State)
+	SaveJobState(id job.ID, state job.State) error
 }
