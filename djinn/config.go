@@ -112,9 +112,10 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 	return nil
 }
 
-func (d *Djinn) resolveService(svc string, u *url.URL) (url.URL, *net.SRV, []*net.SRV, error) {
+func (d *Djinn) resolveService(svc string, u url.URL) (url.URL, *net.SRV, []*net.SRV, error) {
 	ips := ipAddresses()
-	svcUrl := *u
+
+	svcUrl := u
 	var mySRV *net.SRV
 
 	_, records, err := net.LookupSRV(svc, "tcp", d.config.DNSCluster)
