@@ -4,23 +4,38 @@ import (
 	"context"
 	"fmt"
 	"github.com/coreos/etcd/clientv3"
+	"github.com/mewa/djinn/utils"
 	"go.uber.org/zap"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
+func srvUrl(srv *net.SRV) string {
+	return fmt.Sprintf("%s:%d", strings.TrimSuffix(srv.Target, "."), srv.Port)
+}
+
 func (d *Djinn) configure() error {
-	host, srv, records, err := d.resolveService("etcd-server", d.host)
+	var host url.URL
+	var srv *net.SRV
+	var records []*net.SRV
+	var err error
+
+	utils.Backoff(100*time.Millisecond, 30*time.Second, func() error {
+		host, srv, records, err = d.resolveService("etcd-server", *d.host)
+		return err
+	})
+
 	if err != nil {
 		return err
 	}
 
 	var srvHost url.URL = *d.host
-	srvHost.Host = fmt.Sprintf("%s:%d", strings.TrimSuffix(srv.Target, "."), srv.Port)
+	srvHost.Host = srvUrl(srv)
 
-	d.config.APUrls = []url.URL{host}
+	d.config.APUrls = []url.URL{*d.host}
 	d.config.LPUrls = []url.URL{host}
 
 	// disable client access
