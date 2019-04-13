@@ -124,14 +124,15 @@ func (d *Djinn) resolveService(svc string, u url.URL) (url.URL, *net.SRV, []*net
 	}
 
 Loop:
-	for _, val := range records {
-		svcIPs, _ := net.LookupIP(val.Target)
+	for _, record := range records {
+		target := strings.TrimSuffix(record.Target, ".")
+		svcIPs, _ := net.LookupIP(target)
 
 		for _, hostip := range ips {
 			for _, addr := range svcIPs {
-				if addr.Equal(hostip) {
+				if addr.Equal(hostip) && svcUrl.Port() == strconv.Itoa(int(record.Port)) {
 					svcUrl.Host = addr.String() + ":" + svcUrl.Port()
-					mySRV = val
+					mySRV = record
 					break Loop
 				}
 			}
