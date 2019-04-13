@@ -26,8 +26,8 @@ type SerializableSchedule interface {
 }
 
 const (
-	once SchedType = iota
-	spec
+	TypeOnce SchedType = iota
+	TypeSpec
 )
 
 type JSONSchedule struct {
@@ -37,10 +37,10 @@ type JSONSchedule struct {
 
 func (js JSONSchedule) Schedule() (SerializableSchedule, error) {
 	switch js.ScheduleType {
-	case once:
+	case TypeOnce:
 		sched := new(OnceSchedule)
 		return sched, sched.Deserialize(js.ScheduleData)
-	case spec:
+	case TypeSpec:
 		sched := new(SpecSchedule)
 		return sched, sched.Deserialize(js.ScheduleData)
 	}
