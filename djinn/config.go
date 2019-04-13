@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/coreos/etcd/clientv3"
+	"github.com/coreos/etcd/etcdserver/etcdserverpb"
 	"github.com/mewa/djinn/utils"
 	"go.uber.org/zap"
 	"net"
@@ -44,16 +45,27 @@ func (d *Djinn) configure() error {
 
 	err = d.updateMembership(records, srvHost)
 	if err != nil {
-		return err
+		d.log.Error("could not update membership", zap.String("name", d.name), zap.Error(err))
 	}
 
 	return nil
 }
 
+func isMember(d *Djinn, member *etcdserverpb.Member) bool {
+	for peerUrl := range d.config.APUrls {
+		for memberPeerUrl := range member.PeerURLs {
+			if peerUrl == memberPeerUrl {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 	endpoints := []string{}
 	for _, rec := range records {
-		endpoint := fmt.Sprintf("%s:%d", rec.Target, rec.Port)
+		endpoint := srvUrl(rec)
 		endpoints = append(endpoints, endpoint)
 	}
 
@@ -77,14 +89,13 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 
 	var added *clientv3.MemberAddResponse
 	for _, member := range resp.Members {
-		if member.Name == d.name {
+		if isMember(d, member) {
 			_, err := cli.MemberRemove(context.Background(), member.ID)
 			if err != nil {
 				d.log.Error("error removing old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID), zap.Error(err))
-				return err
+			} else {
+				d.log.Info("removed old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID))
 			}
-
-			d.log.Info("removed old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID))
 
 			added, err = cli.MemberAdd(context.Background(), []string{self.String()})
 			if err != nil {
@@ -92,12 +103,12 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 				return err
 			}
 
-			d.log.Info("added new member", zap.String("name", member.Name), zap.Uint64("id", added.Member.ID))
+			d.log.Info("added new member", zap.String("name", d.name), zap.Uint64("id", added.Member.ID))
+			d.config.ClusterState = "existing"
 			break
 		}
 	}
 
-	d.config.ClusterState = "existing"
 	return nil
 }
 
