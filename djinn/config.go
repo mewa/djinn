@@ -19,25 +19,27 @@ func srvUrl(srv *net.SRV) string {
 }
 
 func (d *Djinn) configure() error {
-	var host url.URL
+	var ipHost url.URL
 	var srv *net.SRV
 	var records []*net.SRV
 	var err error
 
+	d.log.Info("resolving", zap.String("name", d.name), zap.String("discovery_dns", d.config.DNSCluster))
 	utils.Backoff(100*time.Millisecond, 30*time.Second, func() error {
-		host, srv, records, err = d.resolveService("etcd-server", *d.host)
+		ipHost, srv, records, err = d.resolveService("etcd-server")
 		return err
 	})
 
 	if err != nil {
 		return err
 	}
+	d.log.Info("resolved host", zap.String("name", d.name), zap.String("dns_host", d.host.String()), zap.String("ip_host", ipHost.String()))
 
 	var srvHost url.URL = *d.host
 	srvHost.Host = srvUrl(srv)
 
 	d.config.APUrls = []url.URL{*d.host}
-	d.config.LPUrls = []url.URL{host}
+	d.config.LPUrls = []url.URL{ipHost}
 
 	// disable client access
 	d.config.LCUrls = nil
@@ -46,15 +48,16 @@ func (d *Djinn) configure() error {
 	err = d.updateMembership(records, srvHost)
 	if err != nil {
 		d.log.Error("could not update membership", zap.String("name", d.name), zap.Error(err))
+		return err
 	}
 
 	return nil
 }
 
 func isMember(d *Djinn, member *etcdserverpb.Member) bool {
-	for peerUrl := range d.config.APUrls {
-		for memberPeerUrl := range member.PeerURLs {
-			if peerUrl == memberPeerUrl {
+	for _, peerUrl := range d.config.APUrls {
+		for _, memberPeerUrl := range member.PeerURLs {
+			if d.name == member.Name || peerUrl.String() == memberPeerUrl {
 				return true
 			}
 		}
@@ -66,12 +69,14 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 	endpoints := []string{}
 	for _, rec := range records {
 		endpoint := srvUrl(rec)
-		endpoints = append(endpoints, endpoint)
+		if endpoint != self.Host {
+			endpoints = append(endpoints, endpoint)
+		}
 	}
 
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
-		DialTimeout: 2 * time.Second,
+		DialTimeout: 15 * time.Second,
 	})
 
 	if err != nil {
@@ -97,25 +102,26 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 				d.log.Info("removed old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID))
 			}
 
-			added, err = cli.MemberAdd(context.Background(), []string{self.String()})
-			if err != nil {
-				d.log.Error("error adding new member", zap.String("name", d.name), zap.Error(err))
-				return err
-			}
-
-			d.log.Info("added new member", zap.String("name", d.name), zap.Uint64("id", added.Member.ID))
-			d.config.ClusterState = "existing"
 			break
 		}
 	}
 
+	added, err = cli.MemberAdd(context.Background(), []string{self.String()})
+	if err != nil {
+		d.log.Error("error adding new member", zap.String("name", d.name), zap.String("url", self.String()), zap.Error(err))
+		return err
+	}
+
+	d.log.Info("added new member", zap.String("name", d.name), zap.Uint64("id", added.Member.ID))
+	d.config.ClusterState = "existing"
+
 	return nil
 }
 
-func (d *Djinn) resolveService(svc string, u url.URL) (url.URL, *net.SRV, []*net.SRV, error) {
+func (d *Djinn) resolveService(svc string) (url.URL, *net.SRV, []*net.SRV, error) {
 	ips := ipAddresses()
 
-	svcUrl := u
+	svcUrl := *d.host
 	var mySRV *net.SRV
 
 	_, records, err := net.LookupSRV(svc, "tcp", d.config.DNSCluster)
@@ -132,6 +138,7 @@ Loop:
 			for _, addr := range svcIPs {
 				if addr.Equal(hostip) && svcUrl.Port() == strconv.Itoa(int(record.Port)) {
 					svcUrl.Host = addr.String() + ":" + svcUrl.Port()
+
 					mySRV = record
 					break Loop
 				}
