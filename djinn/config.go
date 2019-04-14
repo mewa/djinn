@@ -54,10 +54,19 @@ func (d *Djinn) configure() error {
 	return nil
 }
 
-func isMember(d *Djinn, member *etcdserverpb.Member) bool {
+func isNamedMember(d *Djinn, member *etcdserverpb.Member) bool {
+	for _, peerUrl := range d.config.APUrls {
+		if d.name == member.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func isPeer(d *Djinn, member *etcdserverpb.Member) bool {
 	for _, peerUrl := range d.config.APUrls {
 		for _, memberPeerUrl := range member.PeerURLs {
-			if d.name == member.Name || peerUrl.String() == memberPeerUrl {
+			if peerUrl.String() == memberPeerUrl {
 				return true
 			}
 		}
@@ -93,27 +102,43 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 	}
 
 	var added *clientv3.MemberAddResponse
+	var named, peer bool
+	var me *etcdserverpb.Member
 	for _, member := range resp.Members {
-		if isMember(d, member) {
-			_, err := cli.MemberRemove(context.Background(), member.ID)
-			if err != nil {
-				d.log.Error("error removing old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID), zap.Error(err))
-			} else {
-				d.log.Info("removed old member", zap.String("name", member.Name), zap.Uint64("old_id", member.ID))
-			}
+		named = isNamedMember(d, member)
+		peer = isPeer(d, member)
 
+		if named || peer {
+			me = member
 			break
 		}
 	}
 
-	added, err = cli.MemberAdd(context.Background(), []string{self.String()})
-	if err != nil {
-		d.log.Error("error adding new member", zap.String("name", d.name), zap.String("url", self.String()), zap.Error(err))
-		return err
+	if named {
+		// previously present in the cluster
+		// this means we're recovering from failure
+		_, err := cli.MemberRemove(context.Background(), me.ID)
+		if err != nil {
+			d.log.Error("error removing old member", zap.String("name", me.Name), zap.Uint64("old_id", me.ID), zap.Error(err))
+		} else {
+			d.log.Info("removed old member", zap.String("name", me.Name), zap.Uint64("old_id", me.ID))
+		}
 	}
 
-	d.log.Info("added new member", zap.String("name", d.name), zap.Uint64("id", added.Member.ID))
-	d.config.ClusterState = "existing"
+	if named || !peer {
+		// if we were a named member we have just been removed so we need to add ourselves back
+		added, err = cli.MemberAdd(context.Background(), []string{self.String()})
+		if err != nil {
+			d.log.Error("error adding new member", zap.String("name", d.name), zap.String("url", self.String()), zap.Error(err))
+			return err
+		}
+
+		d.log.Info("added new member", zap.String("name", d.name), zap.Uint64("id", added.Member.ID))
+
+		d.config.ClusterState = "existing"
+	}
+	// else: if we're not named but are a peer we're creating a
+	// new cluster and are in the initial configuration
 
 	return nil
 }
