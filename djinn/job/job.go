@@ -73,11 +73,6 @@ func (job *Job) Update(with *Job) {
 func (job *Job) Next(t time.Time) time.Time {
 	next := job.Schedule().Next(t)
 
-	// that's a no-op
-	if next.IsZero() {
-		return next
-	}
-
 	job.PrevTime = job.NextTime
 	job.NextTime = next
 	return next
