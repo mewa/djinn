@@ -22,11 +22,13 @@ type Djinn struct {
 	etcd   *embed.Etcd
 	config *embed.Config
 
-	cluster   string
-	name      string
-	apiServer string
+	cluster string
+	name    string
 
-	host *url.URL
+	serverUrl *url.URL
+	clientUrl *url.URL
+	apiServer string
+	bindAll   bool
 
 	cron    cron.Cron
 	storage storage.Storage
@@ -50,7 +52,7 @@ type Djinn struct {
 	mu *sync.Mutex
 }
 
-func New(name, host, apiServer, discovery string, storage storage.Storage) (*Djinn, error) {
+func New(name, server, clientPort, apiServer string, bindAll bool, discovery string, storage storage.Storage) (*Djinn, error) {
 	log, _ := zap.NewDevelopment()
 
 	conf := embed.NewConfig()
@@ -65,10 +67,13 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) (*Dji
 		return nil, err
 	}
 
-	hostUrl, err := url.Parse(host)
+	serverUrl, err := url.Parse(server)
 	if err != nil {
 		return nil, err
 	}
+
+	clientUrl := *serverUrl
+	clientUrl.Host = clientUrl.Hostname() + ":" + clientPort
 
 	conf.InitialCluster = ""
 	conf.DNSCluster = discovery
@@ -76,11 +81,13 @@ func New(name, host, apiServer, discovery string, storage storage.Storage) (*Dji
 	djinn := &Djinn{
 		config: conf,
 
-		apiServer: apiServer,
-
 		cluster: "default",
 		name:    name,
-		host:    hostUrl,
+
+		serverUrl: serverUrl,
+		clientUrl: &clientUrl,
+		apiServer: apiServer,
+		bindAll:   bindAll,
 
 		storage: storage,
 

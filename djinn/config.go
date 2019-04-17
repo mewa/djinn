@@ -19,31 +19,47 @@ func srvUrl(srv *net.SRV) string {
 }
 
 func (d *Djinn) configure() error {
-	var ipHost url.URL
+	var serverIp, clientIp url.URL
 	var srv *net.SRV
 	var records []*net.SRV
 	var err error
 
 	d.log.Info("resolving", zap.String("name", d.name), zap.String("discovery_dns", d.config.DNSCluster))
 	utils.Backoff(100*time.Millisecond, 30*time.Second, func() error {
-		ipHost, srv, records, err = d.resolveService("etcd-server")
+		serverIp, srv, records, err = d.resolveService("etcd-server", *d.serverUrl)
 		return err
 	})
 
 	if err != nil {
+		d.log.Info("could not resolve server service", zap.String("name", d.name))
 		return err
 	}
-	d.log.Info("resolved host", zap.String("name", d.name), zap.String("dns_host", d.host.String()), zap.String("ip_host", ipHost.String()))
 
-	var srvHost url.URL = *d.host
+	utils.Backoff(100*time.Millisecond, 30*time.Second, func() error {
+		clientIp, _, _, err = d.resolveService("etcd-client", *d.clientUrl)
+		return err
+	})
+
+	if err != nil {
+		d.log.Info("could not resolve client service", zap.String("name", d.name))
+		return err
+	}
+
+	var srvHost url.URL = *d.serverUrl
 	srvHost.Host = srvUrl(srv)
 
-	d.config.APUrls = []url.URL{*d.host}
-	d.config.LPUrls = []url.URL{ipHost}
+	if d.bindAll {
+		serverIp.Host = "0.0.0.0:" + serverIp.Port()
+		clientIp.Host = "0.0.0.0:" + clientIp.Port()
+	}
 
-	// disable client access
-	d.config.LCUrls = nil
-	d.config.ACUrls = nil
+	d.config.APUrls = []url.URL{*d.serverUrl}
+	d.config.LPUrls = []url.URL{serverIp}
+
+	d.config.ACUrls = []url.URL{*d.clientUrl}
+	d.config.LCUrls = []url.URL{clientIp}
+
+	d.log.Info("listening", zap.String("server_ip", serverIp.String()), zap.String("client_ip", clientIp.String()))
 
 	err = d.updateMembership(records, srvHost)
 	if err != nil {
@@ -143,11 +159,10 @@ func (d *Djinn) updateMembership(records []*net.SRV, self url.URL) error {
 	return nil
 }
 
-func (d *Djinn) resolveService(svc string) (url.URL, *net.SRV, []*net.SRV, error) {
-	ips := ipAddresses()
-
-	svcUrl := *d.host
+func (d *Djinn) resolveService(svc string, svcUrl url.URL) (url.URL, *net.SRV, []*net.SRV, error) {
 	var mySRV *net.SRV
+
+	ips := ipAddresses()
 
 	_, records, err := net.LookupSRV(svc, "tcp", d.config.DNSCluster)
 	if err != nil {

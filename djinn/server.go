@@ -69,7 +69,7 @@ func (d *Djinn) statusHandler(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.Marshal(StatusResponse{
 		Running: d.running,
 		Name:    d.name,
-		Host:    d.host.String(),
+		Host:    d.serverUrl.String(),
 	})
 
 	var buf bytes.Buffer
