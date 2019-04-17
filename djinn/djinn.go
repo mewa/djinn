@@ -267,20 +267,22 @@ func (d *Djinn) runJob(j *job.Job) {
 	}
 	d.progress[j.ID] = true
 
-	go func(j *job.Job) {
+	go func(j job.Job) {
 		defer func() {
 			d.mu.Lock()
 			defer d.mu.Unlock()
 			d.progress[j.ID] = false
 		}()
 
-		d.log.Info("running job", zap.String("name", d.config.Name), zap.Stringer("job", j))
+		d.log.Info("running job", zap.String("name", d.config.Name), zap.Stringer("job", &j))
 		// TODO: this doesn't take care of leadership losses while in between states
 		if j.State.State == job.Initial || j.State.State == job.Started {
+			// by the time we reach this point PrevTime holds current execution's time
+			j.State = job.State{job.Starting, j.PrevTime.Unix()}
 			req := &JobPutRequest{
-				Job: *j,
+				Job: j,
 			}
-			req.Job.State = job.State{job.Starting, j.NextTime.Unix()}
+
 			_, err := d.Put(req)
 			if err != nil {
 				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
@@ -298,12 +300,12 @@ func (d *Djinn) runJob(j *job.Job) {
 			}
 
 			// TODO: handle job execution failures
-			d.executeJob(j)
+			d.executeJob(&j)
 
+			j.State.State = job.Started
 			req = &JobPutRequest{
-				Job: *j,
+				Job: j,
 			}
-			req.Job.State.State = job.Started
 
 			_, err = d.Put(req)
 			if err != nil {
@@ -321,10 +323,10 @@ func (d *Djinn) runJob(j *job.Job) {
 			}
 
 			if j.Schedule().Next(time.Now()).IsZero() {
-				d.deleteJob(j)
+				d.deleteJob(&j)
 			}
 		}
-	}(j)
+	}(*j)
 }
 
 func (d *Djinn) executeJob(j *job.Job) error {
