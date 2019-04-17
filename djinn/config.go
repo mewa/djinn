@@ -71,10 +71,8 @@ func (d *Djinn) configure() error {
 }
 
 func isNamedMember(d *Djinn, member *etcdserverpb.Member) bool {
-	for _, peerUrl := range d.config.APUrls {
-		if d.name == member.Name {
-			return true
-		}
+	if d.name == member.Name {
+		return true
 	}
 	return false
 }
