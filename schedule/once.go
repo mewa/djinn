@@ -8,13 +8,14 @@ import (
 const timeFormat = time.RFC3339
 
 type OnceSchedule struct {
-	Time    time.Time `json:"time"`
-	Ran     bool      `json:"ran"`
-	Running bool      `json:"-"`
+	Timestamp int64     `json:"time"`
+	Time      time.Time `json:"-"`
+	Ran       bool      `json:"ran"`
+	Running   bool      `json:"-"`
 }
 
 func Once(t time.Time) *OnceSchedule {
-	return &OnceSchedule{t, false, false}
+	return &OnceSchedule{t.Unix(), t, false, false}
 }
 
 func (im *OnceSchedule) Next(t time.Time) time.Time {
@@ -33,6 +34,7 @@ func (im *OnceSchedule) AfterJob() {
 }
 
 func (im *OnceSchedule) Serialize() string {
+	im.Timestamp = im.Time.Unix()
 	d, _ := json.Marshal(im)
 	return string(d)
 }
@@ -45,7 +47,7 @@ func (im *OnceSchedule) Deserialize(spec string) error {
 		return err
 	}
 
-	im.Time = sched.Time
+	im.Time = time.Unix(sched.Timestamp, 0)
 	im.Ran = im.Ran || sched.Ran
 
 	return nil
