@@ -2,12 +2,20 @@ package djinn
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"github.com/gorilla/mux"
 	"github.com/mewa/djinn/djinn/job"
+	"github.com/mewa/djinn/schedule"
+	"go.opencensus.io/exporter/prometheus"
+	"go.opencensus.io/stats"
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
+	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
+	"time"
 )
 
 type StatusResponse struct {
@@ -26,6 +34,9 @@ type PutCronJobResponse struct {
 }
 
 func (d *Djinn) cronHandler(w http.ResponseWriter, r *http.Request) {
+	ctx, _ := tag.New(context.Background(), tag.Insert(KeyType, "cron"), tag.Insert(KeyMethod, r.Method))
+	start := time.Now()
+
 	vars := mux.Vars(r)
 	jobId := vars["job"]
 
@@ -39,6 +50,10 @@ func (d *Djinn) cronHandler(w http.ResponseWriter, r *http.Request) {
 	descr := schedule.JSONSchedule{schedule.TypeSpec, s.Expression}
 
 	if _, err := descr.Schedule(); err != nil {
+		ctx, _ = tag.New(ctx, tag.Insert(KeyStatus, "400"))
+		stats.Record(ctx, MHttpRequestLatency.M(float64(time.Now().Sub(start)/time.Millisecond)))
+		stats.Record(ctx, MHttpRequests.M(1))
+
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
@@ -52,7 +67,11 @@ func (d *Djinn) cronHandler(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		ctx, _ = tag.New(ctx, tag.Insert(KeyStatus, "503"))
+		stats.Record(ctx, MHttpRequestLatency.M(float64(time.Now().Sub(start)/time.Millisecond)))
+		stats.Record(ctx, MHttpRequests.M(1))
+
+		w.WriteHeader(http.StatusServiceUnavailable)
 		w.Write([]byte(err.Error()))
 		return
 	}
@@ -60,9 +79,18 @@ func (d *Djinn) cronHandler(w http.ResponseWriter, r *http.Request) {
 	httpResp, err := json.Marshal(&PutCronJobResponse{resp.Next})
 
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		ctx, _ = tag.New(ctx, tag.Insert(KeyStatus, "500"))
+		stats.Record(ctx, MHttpRequestLatency.M(float64(time.Now().Sub(start)/time.Millisecond)))
+		stats.Record(ctx, MHttpRequests.M(1))
+
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	ctx, _ = tag.New(ctx, tag.Insert(KeyStatus, "200"))
+	stats.Record(ctx, MHttpRequestLatency.M(float64(time.Now().Sub(start)/time.Millisecond)))
+	stats.Record(ctx, MHttpRequests.M(1))
+
 	w.Write(httpResp)
 }
 
@@ -81,6 +109,17 @@ func (d *Djinn) statusHandler(w http.ResponseWriter, r *http.Request) {
 
 func (d *Djinn) Serve() error {
 	r := mux.NewRouter()
+
+	promExport, err := prometheus.NewExporter(prometheus.Options{
+		Namespace: "djinn",
+	})
+	if err != nil {
+		d.log.Error("failed to create Prometheus exporter", zap.Error(err))
+		return err
+	}
+	view.RegisterExporter(promExport)
+
+	r.Handle("/metrics", promExport)
 	r.HandleFunc("/status", d.statusHandler)
 	r.HandleFunc("/{job}/cron", d.cronHandler).
 		Methods("PUT")

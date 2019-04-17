@@ -1,6 +1,7 @@
 package djinn
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/coreos/etcd/embed"
 	"github.com/coreos/etcd/mvcc"
@@ -10,6 +11,7 @@ import (
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
 	"github.com/mewa/djinn/storage"
+	"go.opencensus.io/stats"
 	"go.uber.org/zap"
 	"net/http"
 	"net/url"
@@ -130,6 +132,14 @@ func (d *Djinn) Start() error {
 
 	d.idGen = idutil.NewGenerator(uint16(e.Server.ID()), time.Now())
 	d.etcd = e
+
+	err = d.initMetrics()
+	if err != nil {
+		d.log.Error("could not initialise metrics", zap.String("name", d.config.Name), zap.Error(err))
+		return err
+	} else {
+		d.log.Info("metrics initialised", zap.String("name", d.config.Name))
+	}
 
 	err = d.Serve()
 	if err != nil {
@@ -319,6 +329,7 @@ func (d *Djinn) runJob(j *job.Job) {
 
 func (d *Djinn) executeJob(j *job.Job) error {
 	// TODO: add implementation
+	stats.Record(context.Background(), MJobExecutions.M(1))
 	return nil
 }
 
