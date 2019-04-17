@@ -13,7 +13,8 @@ import (
 type StatusResponse struct {
 	Running bool   `json:"running"`
 	Name    string `json:"name"`
-	Host    string `json:"host"`
+	Server  string `json:"server"`
+	Client  string `json:"client"`
 }
 
 type PutCronJobRequest struct {
@@ -69,7 +70,8 @@ func (d *Djinn) statusHandler(w http.ResponseWriter, r *http.Request) {
 	data, _ := json.Marshal(StatusResponse{
 		Running: d.running,
 		Name:    d.name,
-		Host:    d.serverUrl.String(),
+		Server:  d.serverUrl.String(),
+		Client:  d.clientUrl.String(),
 	})
 
 	var buf bytes.Buffer
