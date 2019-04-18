@@ -110,6 +110,8 @@ func (s state) String() string {
 		return "starting"
 	case Started:
 		return "started"
+	case Error:
+		return "error"
 	}
 	return "unknown"
 }
