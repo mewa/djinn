@@ -23,18 +23,21 @@ var (
 		Name:        "http_request_latency",
 		Measure:     MHttpRequestLatency,
 		Description: "Put job request latency distribution",
+		TagKeys:     []tag.Key{KeyStatus, KeyMethod, KeyType},
 		Aggregation: view.Distribution(0, 25, 50, 75, 100, 200, 400, 600, 800, 1000, 2000, 4000, 6000),
 	}
 	HttpRequestCountView = &view.View{
 		Name:        "http_requests",
 		Measure:     MHttpRequests,
 		Description: "The number of new jobs",
+		TagKeys:     []tag.Key{KeyStatus, KeyMethod, KeyType},
 		Aggregation: view.Count(),
 	}
 	JobExecutionsView = &view.View{
 		Name:        "job_executions",
 		Measure:     MJobExecutions,
 		Description: "The number of job executions",
+		TagKeys:     []tag.Key{KeyStatus, KeyMethod, KeyType},
 		Aggregation: view.Count(),
 	}
 )
