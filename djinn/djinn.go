@@ -215,8 +215,7 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 		}
 
 		req.Job.Handler = job.Handler{
-			Remove: d.deleteJob,
-			Run:    d.runJob,
+			Run: d.runJob,
 		}
 
 		d.putJob(&req.Job)
@@ -310,28 +309,41 @@ func (d *Djinn) runJob(j *job.Job) {
 			// TODO: handle job execution failures
 			d.executeJob(&j)
 
-			j.State.State = job.Started
-			req = &JobPutRequest{
-				Job: j,
+			if err != nil {
+				j.State.State = job.Error
+
+				err = d.storage.SaveJobState(j.ID, j.State)
+				if err != nil {
+					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
+
+				return
+			} else {
+				j.State.State = job.Started
+				req = &JobPutRequest{
+					Job: j,
+				}
+
+				_, err = d.Put(req)
+				if err != nil {
+					d.log.Error("error updating job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 			}
 
-			_, err = d.Put(req)
+			err = d.storage.SaveJobState(j.ID, j.State)
 			if err != nil {
-				d.log.Error("error starting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)))
-
-				err = d.storage.SaveJobState(j.ID, job.State{job.Error, j.State.Time})
-				if err != nil {
-					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
-				}
-			} else {
-				err = d.storage.SaveJobState(j.ID, req.Job.State)
-				if err != nil {
-					d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
-				}
+				d.log.Error("error saving job state", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
 			}
 
 			if j.Schedule().Next(time.Now()).IsZero() {
-				d.deleteJob(&j)
+				rmReq := &JobDeleteRequest{
+					JobId: j.ID,
+				}
+
+				err = d.Delete(rmReq)
+				if err != nil {
+					d.log.Error("error deleting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+				}
 			}
 		}
 	}(*j)
