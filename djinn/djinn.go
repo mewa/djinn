@@ -10,6 +10,7 @@ import (
 	"github.com/coreos/etcd/pkg/wait"
 	"github.com/mewa/djinn/cron"
 	"github.com/mewa/djinn/djinn/job"
+	"github.com/mewa/djinn/executor"
 	"github.com/mewa/djinn/storage"
 	"go.opencensus.io/stats"
 	"go.uber.org/zap"
@@ -32,8 +33,9 @@ type Djinn struct {
 	apiServer string
 	bindAll   bool
 
-	cron    cron.Cron
-	storage storage.Storage
+	cron     cron.Cron
+	storage  storage.Storage
+	executor executor.Executor
 
 	server *http.Server
 
@@ -54,7 +56,7 @@ type Djinn struct {
 	mu *sync.Mutex
 }
 
-func New(name, server, clientPort, apiServer string, bindAll bool, discovery string, storage storage.Storage) (*Djinn, error) {
+func New(name, server, clientPort, apiServer string, bindAll bool, discovery string, storage storage.Storage, executor executor.Executor) (*Djinn, error) {
 	log, _ := zap.NewDevelopment()
 
 	conf := embed.NewConfig()
@@ -91,7 +93,8 @@ func New(name, server, clientPort, apiServer string, bindAll bool, discovery str
 		apiServer: apiServer,
 		bindAll:   bindAll,
 
-		storage: storage,
+		storage:  storage,
+		executor: executor,
 
 		cron: cron.New(),
 
@@ -307,7 +310,7 @@ func (d *Djinn) runJob(j *job.Job) {
 			}
 
 			// TODO: handle job execution failures
-			d.executeJob(&j)
+			err = d.executeJob(&j)
 
 			if err != nil {
 				j.State.State = job.Error
@@ -350,11 +353,26 @@ func (d *Djinn) runJob(j *job.Job) {
 }
 
 func (d *Djinn) executeJob(j *job.Job) error {
-	// TODO: add implementation
 	stats.Record(context.Background(), MJobExecutions.M(1))
-	return nil
+
+	err := d.executor.Execute(j, job.Remover(d))
+
+	return err
 }
 
 func (d *Djinn) isLeader() bool {
 	return d.etcd.Server.ID() == d.etcd.Server.Leader()
+}
+
+// implements job.Remover
+func (d *Djinn) Remove(j *job.Job) error {
+	rmReq := &JobDeleteRequest{
+		JobId: j.ID,
+	}
+
+	err := d.Delete(rmReq)
+	if err != nil {
+		d.log.Error("error deleting job", zap.String("name", d.config.Name), zap.String("job_id", string(j.ID)), zap.Error(err))
+	}
+	return err
 }
