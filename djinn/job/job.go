@@ -1,9 +1,12 @@
 package job
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"github.com/mewa/djinn/schedule"
 	"time"
+	"encoding/binary"
+	"bytes"
 )
 
 type ID string
@@ -110,4 +113,15 @@ func (s state) String() string {
 
 func (job *Job) String() string {
 	return fmt.Sprintf("{id=%s, state=%s, descriptor=%v, next=%s, prev=%s}", job.ID, job.State, job.Descriptor, job.NextTime, job.PrevTime)
+}
+
+func (jobId ID) Hash() uint64 {
+	h := sha256.New()
+	h.Write([]byte(jobId))
+
+	var hash uint64
+	r := bytes.NewReader(h.Sum(nil))
+	binary.Read(r, binary.LittleEndian, &hash)
+
+	return hash
 }
