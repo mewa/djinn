@@ -224,7 +224,15 @@ func (d *Djinn) applyEvent(event mvccpb.Event) {
 		return
 	}
 	if event.Type == mvccpb.DELETE {
-		panic("not implemented")
+		jid := job.ID(event.Kv.Key)
+
+		saved, exists := d.jobs[jid]
+		if exists {
+			d.deleteJob(saved)
+		}
+
+		hash := uint64(jid.Hash())
+		d.wait.Trigger(hash, jid)
 		return
 	}
 }

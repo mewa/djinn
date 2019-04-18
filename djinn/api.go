@@ -19,6 +19,10 @@ type JobPutResponse struct {
 	Next int64 `json:"next_execution"`
 }
 
+type JobDeleteRequest struct {
+	JobId job.ID `json:"job_id"`
+}
+
 type AddMemberRequest struct {
 	name string
 	host string
@@ -68,6 +72,30 @@ func (d *Djinn) Put(req *JobPutRequest) (*JobPutResponse, error) {
 	}
 
 	return resp, err
+}
+
+func (d *Djinn) Delete(req *JobDeleteRequest) error {
+	hash := uint64(req.JobId.Hash())
+	ch := d.wait.Register(hash)
+
+	ctx, _ := context.WithTimeout(context.TODO(), time.Millisecond*time.Duration(10*d.config.ElectionMs))
+	_, err := d.etcd.Server.DeleteRange(ctx, &etcdserverpb.DeleteRangeRequest{
+		Key: []byte(req.JobId),
+	})
+
+	if err != nil {
+		d.wait.Trigger(hash, nil)
+		return err
+	}
+
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		d.wait.Trigger(hash, nil)
+		return ctx.Err()
+	}
+
+	return nil
 }
 
 func (d *Djinn) AddMember(req *AddMemberRequest) (*AddMemberResponse, error) {
