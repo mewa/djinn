@@ -25,9 +25,12 @@ type State struct {
 	Time  int64
 }
 
+type Remover interface {
+	Remove(job *Job) error
+}
+
 type Handler struct {
-	Remove func(job *Job)
-	Run    func(job *Job)
+	Run func(job *Job)
 }
 
 type BeforeJobber interface {
