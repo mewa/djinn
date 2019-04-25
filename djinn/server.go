@@ -7,7 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/mewa/djinn/djinn/job"
 	"github.com/mewa/djinn/schedule"
-	"go.opencensus.io/exporter/prometheus"
+	"contrib.go.opencensus.io/exporter/prometheus"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
