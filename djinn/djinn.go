@@ -157,6 +157,8 @@ func (d *Djinn) Start() error {
 }
 
 func (d *Djinn) run() {
+	defer d.server.Close()
+
 	select {
 	case <-d.etcd.Server.ReadyNotify():
 		d.running = true
@@ -199,8 +201,10 @@ func (d *Djinn) Stop() {
 		d.stop <- struct{}{}
 		<-d.Done
 	}
+
 	d.cron.Stop()
 	d.running = false
+
 	d.log.Info("djinn stopped", zap.String("name", d.config.Name))
 }
 
