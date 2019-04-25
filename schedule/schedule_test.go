@@ -9,7 +9,7 @@ func Test_Schedule_Serialize_Once(t *testing.T) {
 	now := time.Now()
 	now = now.Truncate(time.Second)
 
-	sched := JSONSchedule{once, Once(now).Serialize()}
+	sched := JSONSchedule{TypeOnce, Once(now).Serialize()}
 
 	s, err := sched.Schedule()
 	if err != nil {
